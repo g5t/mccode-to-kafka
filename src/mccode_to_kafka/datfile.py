@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from numpy import ndarray
 
+
 @dataclass
 class DatFileCommon:
     source: Path
@@ -22,11 +23,51 @@ class DatFileCommon:
             lines = file.readlines()
 
         header = [x.strip(' #\n') for x in filter(lambda x: x[0] == '#', lines)]
-        meta = {k.strip(): v.strip() for k, v in [x.split(':', 1) for x in filter(lambda x: not x.startswith('Param'), header)]}
-        parm = {k.strip(): v.strip() for k, v in [x.split(':', 1)[1].split('=', 1) for x in filter(lambda x: x.startswith('Param'), header)]}
+        meta = {k.strip(): v.strip() for k, v in
+                [x.split(':', 1) for x in filter(lambda x: not x.startswith('Param'), header)]}
+        parm = {k.strip(): v.strip() for k, v in
+                [x.split(':', 1)[1].split('=', 1) for x in filter(lambda x: x.startswith('Param'), header)]}
         var = meta.get('variables', '').split(' ')
         data = array([[float(x) for x in line.strip().split()] for line in filter(lambda x: x[0] != '#', lines)])
         return cls(source, meta, parm, var, data)
+
+    def __getitem__(self, item):
+        if item in self.variables:
+            index = [i for i, x in enumerate(self.variables) if x == item]
+            if len(index) != 1:
+                raise RuntimeError(f'Expected one index for {item} but found {index}')
+            return self.data[index[0], ...]
+        elif item in self.parameters:
+            return self.parameters[item]
+        elif item in self.metadata:
+            return self.metadata[item]
+        else:
+            raise KeyError(f'Unknown key {item}')
+
+    def dim_metadata(self) -> list[dict]:
+        pass
+
+    def to_hs01_dict(self, source: str = None, info=None, time=None):
+        from .utils import now_in_ns_since_epoch
+        hs01 = dict(source=source or str(self.source), timestamp=time or now_in_ns_since_epoch())
+        if info:
+            hs01['info'] = info
+        hs01['data'] = self['I'] / self['N']
+        hs01['errors'] = self['I_err'] / self['N']
+        hs01['current_shape'] = list(hs01['data'].shape)
+        hs01['dim_metadata'] = self.dim_metadata()
+        return hs01
+
+
+def dim_metadata(length, label_unit, lower_limit, upper_limit) -> dict:
+    from numpy import linspace
+    label = label_unit.split(' ', 1)[0]
+    unit = label_unit.split(' ', 1)[1].strip('[] ')
+    if '\\gms' == unit:
+        unit = 'microseconds'
+    bin_width = (upper_limit - lower_limit) / (length - 1)
+    boundaries = linspace(lower_limit - bin_width / 2, upper_limit + bin_width / 2, length + 1)
+    return dict(lenght=length, label=label, unit=unit, bin_boundaries=boundaries)
 
 
 @dataclass
@@ -39,6 +80,11 @@ class DatFile1D(DatFileCommon):
         # we always want the variables along the first dimension:
         self.data = self.data.transpose((1, 0))
 
+    def dim_metadata(self) -> list[dict]:
+        lower_limit, upper_limit = [float(x) for x in self['xlimits'].split()]
+        return [dim_metadata(self.data.shape[1], self['xlabel'], lower_limit, upper_limit), ]
+
+
 
 @dataclass
 class DatFile2D(DatFileCommon):
@@ -50,4 +96,21 @@ class DatFile2D(DatFileCommon):
             raise RuntimeError(f'Expected {ny*nv =} by {nx =} but have {self.data.shape}')
         self.data = self.data.reshape((nv, ny, nx))
 
+    def dim_metadata(self) -> list[dict]:
+        lower_x, upper_x, lower_y, upper_y = [float(x) for x in self['xylimits'].split()]
+        return [dim_metadata(self.data.shape[2], self['xlabel'], lower_x, upper_x),
+                dim_metadata(self.data.shape[1], self['ylabel'], lower_y, upper_y)]
 
+
+def read_mccode_dat(filename: str):
+    common = DatFileCommon.from_filename(filename)
+    ndim = len([common.metadata['type'].split('(', 1)[1].strip(')').split(',')])
+    dat_type = None
+    if ndim == 1:
+        dat_type = DatFile1D
+    elif ndim == 2:
+        dat_type = DatFile2D
+    else:
+        raise RuntimeError(f'Unexpected number of dimensions: {ndim}')
+
+    return dat_type(common.source, common.metadata, common.parameters, common.variables, common.data)
