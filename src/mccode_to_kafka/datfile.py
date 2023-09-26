@@ -47,7 +47,7 @@ class DatFileCommon:
     def dim_metadata(self) -> list[dict]:
         pass
 
-    def to_hs01_dict(self, source: str = None, info=None, time=None):
+    def to_hs01_dict(self, source: str = None, info: str = None, time: int = None):
         from .utils import now_in_ns_since_epoch
         hs01 = dict(source=source or str(self.source), timestamp=time or now_in_ns_since_epoch())
         if info:

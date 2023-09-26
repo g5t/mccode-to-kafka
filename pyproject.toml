@@ -6,10 +6,14 @@ build-backend = "setuptools.build_meta"
 name = "mccode-to-kafka"
 dependencies = [
     "ess-streaming-data-types==0.23.1",
+    "confluent-kafka==2.2.0",
     "numpy",
     "importlib_metadata; python_version<'3.8'",
 ]
 dynamic = ["version"]
+
+[project.scripts]
+mccode-to-kafka = "mccode_to_kafka.sender:command_line_send"
 
 [tool.setuptools_scm]
 
