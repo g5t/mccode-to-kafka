@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mccode-to-kafka"
+dependencies = [
+    "ess-streaming-data-types==0.23.1",
+    "numpy",
+    "importlib_metadata; python_version<'3.8'",
+]
+dynamic = ["version"]
+
+[tool.setuptools_scm]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["mccode_to_kafka"]
