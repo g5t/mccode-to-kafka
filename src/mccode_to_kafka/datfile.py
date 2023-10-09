@@ -104,13 +104,8 @@ class DatFile2D(DatFileCommon):
 
 def read_mccode_dat(filename: str):
     common = DatFileCommon.from_filename(filename)
-    ndim = len([common.metadata['type'].split('(', 1)[1].strip(')').split(',')])
-    dat_type = None
-    if ndim == 1:
-        dat_type = DatFile1D
-    elif ndim == 2:
-        dat_type = DatFile2D
-    else:
+    ndim = len(common.metadata['type'].split('(', 1)[1].strip(')').split(','))
+    if ndim < 1 or ndim > 2:
         raise RuntimeError(f'Unexpected number of dimensions: {ndim}')
-
+    dat_type = DatFile1D if ndim == 1 else DatFile2D
     return dat_type(common.source, common.metadata, common.parameters, common.variables, common.data)
