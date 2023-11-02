@@ -16,7 +16,7 @@ def send_histograms(root: Path, names: list[str] = None, source: str = None, bro
     if root.is_file() and names is None:
         names = [root.stem]
         root = root.parent
-    elif root.is_dir() and names is not None:
+    elif root.is_dir() and names is None:
         names = [Path(x).stem for x in root.glob('*.dat')]
 
     config = dict(data_brokers=[broker], source=source)
