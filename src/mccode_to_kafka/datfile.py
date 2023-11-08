@@ -105,7 +105,6 @@ class DatFile1D(DatFileCommon):
         return [dim_metadata(self.data.shape[1], self['xlabel'], lower_limit, upper_limit), ]
 
 
-
 @dataclass
 class DatFile2D(DatFileCommon):
     def __post_init__(self):

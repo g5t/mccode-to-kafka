@@ -15,8 +15,14 @@ dynamic = ["version"]
 [project.scripts]
 mccode-to-kafka = "mccode_to_kafka.sender:command_line_send"
 
+[project.optional-dependencies]
+test = ["pytest", "mock", "flake8-pyproject"]
+
 [tool.setuptools_scm]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["mccode_to_kafka"]
+
+[tool.flake8]
+max-line-length = 120
