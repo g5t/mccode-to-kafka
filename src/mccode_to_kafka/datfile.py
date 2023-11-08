@@ -13,7 +13,6 @@ class DatFileCommon:
 
     @classmethod
     def from_filename(cls, filename: str):
-        from numpy import array
         source = Path(filename).resolve()
         if not source.exists():
             raise RuntimeError('Source filename does not exist')
@@ -21,7 +20,11 @@ class DatFileCommon:
             raise RuntimeError(f'{filename} does not name a valid file')
         with source.open('r') as file:
             lines = file.readlines()
+        return cls.from_lines(source, lines)
 
+    @classmethod
+    def from_lines(cls, source: Path, lines: list[str]):
+        from numpy import array
         header = [x.strip(' #\n') for x in filter(lambda x: x[0] == '#', lines)]
         meta = {k.strip(): v.strip() for k, v in
                 [x.split(':', 1) for x in filter(lambda x: not x.startswith('Param'), header)]}
@@ -47,27 +50,44 @@ class DatFileCommon:
     def dim_metadata(self) -> list[dict]:
         pass
 
-    def to_hs01_dict(self, source: str = None, info: str = None, time: int = None):
+    def to_hs_dict(self, source: str = None, info: str = None, time: int = None):
+        """Produce a dictionary suitable for serialising to HS00 or HS01 via ess-streaming-data-types"""
         from .utils import now_in_ns_since_epoch
-        hs01 = dict(source=source or str(self.source), timestamp=time or now_in_ns_since_epoch())
+        from numpy import geterr, seterr
+        hs = dict(source=source or str(self.source), timestamp=time or now_in_ns_since_epoch())
         if info:
-            hs01['info'] = info
-        hs01['data'] = self['I'] / self['N']
-        hs01['errors'] = self['I_err'] / self['N']
-        hs01['current_shape'] = list(hs01['data'].shape)
-        hs01['dim_metadata'] = self.dim_metadata()
-        return hs01
+            hs['info'] = info
+
+        # We want to ignore division by zero errors, since N == 0 is a valid case indicating no counts
+        invalid = geterr()['invalid']
+        seterr(invalid='ignore')
+        hs['data'] = self['I'] / self['N']
+        hs['errors'] = self['I_err'] / self['N']
+        seterr(invalid=invalid)
+
+        hs['current_shape'] = list(hs['data'].shape)
+        hs['dim_metadata'] = self.dim_metadata()
+        return hs
+
+    def to_hs01_dict(self, source: str = None, info: str = None, time: int = None):
+        # any integer values are allowed to be signed for HS01
+        return self.to_hs_dict(source=source, info=info, time=time)
+
+    def to_hs00_dict(self, source: str = None, info: str = None, time: int = None):
+        # integer values must be unsigned for HS00 -- but that should be the case already, so ignore it?
+        return self.to_hs_dict(source=source, info=info, time=time)
 
 
 def dim_metadata(length, label_unit, lower_limit, upper_limit) -> dict:
     from numpy import linspace
-    label = label_unit.split(' ', 1)[0]
-    unit = label_unit.split(' ', 1)[1].strip('[] ')
+    parts = label_unit.split(' ')
+    label = ' '.join(parts[:-1])
+    unit = parts[-1].strip('[] ')
     if '\\gms' == unit:
         unit = 'microseconds'
     bin_width = (upper_limit - lower_limit) / (length - 1)
     boundaries = linspace(lower_limit - bin_width / 2, upper_limit + bin_width / 2, length + 1)
-    return dict(lenght=length, label=label, unit=unit, bin_boundaries=boundaries)
+    return dict(length=length, label=label, unit=unit, bin_boundaries=boundaries)
 
 
 @dataclass

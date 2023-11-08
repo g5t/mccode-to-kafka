@@ -7,7 +7,7 @@ class HistogramSink:
         Constructor.
 
         :param producer: The underlying Kafka producer to publish to.
-        :param source_name: The source identifier for produced Histogram hs01 messages
+        :param source_name: The source identifier for produced Histogram hs00 messages
         """
         if producer is None:
             raise Exception("Histogram sink must have a producer")  # pragma: no mutate
@@ -23,8 +23,8 @@ class HistogramSink:
         :param information: Information to write to the 'info' field.
         :return: The raw buffer of the FlatBuffers message.
         """
-        from streaming_data_types.histogram_hs01 import serialise_hs01
-        return serialise_hs01(histogram.to_hs01_dict(source=self.source, time=timestamp, info=information))
+        from streaming_data_types.histogram_hs00 import serialise_hs00
+        return serialise_hs00(histogram.to_hs00_dict(source=self.source, time=timestamp, info=information))
 
     def send_histogram(self, topic, histogram: DatFileCommon, timestamp: int = 0, information: str = ""):
         """
