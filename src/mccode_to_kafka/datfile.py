@@ -50,7 +50,7 @@ class DatFileCommon:
     def dim_metadata(self) -> list[dict]:
         pass
 
-    def to_hs_dict(self, source: str = None, info: str = None, time: int = None):
+    def to_hs_dict(self, source: str = None, info: str = None, time: int = None, normalise: bool = False):
         """Produce a dictionary suitable for serialising to HS00 or HS01 via ess-streaming-data-types"""
         from .utils import now_in_ns_since_epoch
         from numpy import geterr, seterr
@@ -61,21 +61,21 @@ class DatFileCommon:
         # We want to ignore division by zero errors, since N == 0 is a valid case indicating no counts
         invalid = geterr()['invalid']
         seterr(invalid='ignore')
-        hs['data'] = self['I'] / self['N']
-        hs['errors'] = self['I_err'] / self['N']
+        hs['data'] = self['I'] / self['N'] if normalise else self['I']
+        hs['errors'] = self['I_err'] / self['N'] if normalise else self['I_err']
         seterr(invalid=invalid)
 
         hs['current_shape'] = list(hs['data'].shape)
         hs['dim_metadata'] = self.dim_metadata()
         return hs
 
-    def to_hs01_dict(self, source: str = None, info: str = None, time: int = None):
+    def to_hs01_dict(self, source: str = None, info: str = None, time: int = None, normalise: bool = False):
         # any integer values are allowed to be signed for HS01
-        return self.to_hs_dict(source=source, info=info, time=time)
+        return self.to_hs_dict(source=source, info=info, time=time, normalise=normalise)
 
-    def to_hs00_dict(self, source: str = None, info: str = None, time: int = None):
+    def to_hs00_dict(self, source: str = None, info: str = None, time: int = None, normalise: bool = False):
         # integer values must be unsigned for HS00 -- but that should be the case already, so ignore it?
-        return self.to_hs_dict(source=source, info=info, time=time)
+        return self.to_hs_dict(source=source, info=info, time=time, normalise=normalise)
 
 
 def dim_metadata(length, label_unit, lower_limit, upper_limit) -> dict:

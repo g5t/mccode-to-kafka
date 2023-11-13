@@ -2,7 +2,7 @@ from .datfile import DatFileCommon
 
 
 class HistogramSink:
-    def __init__(self, producer, source_name):
+    def __init__(self, producer, source_name, normalise: bool = False):
         """
         Constructor.
 
@@ -13,6 +13,7 @@ class HistogramSink:
             raise Exception("Histogram sink must have a producer")  # pragma: no mutate
         self.producer = producer
         self.source = source_name
+        self.normalise = normalise
 
     def serialise_function(self, histogram: DatFileCommon, timestamp: int, information: str):
         """
@@ -24,7 +25,8 @@ class HistogramSink:
         :return: The raw buffer of the FlatBuffers message.
         """
         from streaming_data_types.histogram_hs00 import serialise_hs00
-        return serialise_hs00(histogram.to_hs00_dict(source=self.source, time=timestamp, info=information))
+        hs_dict = histogram.to_hs00_dict(source=self.source, time=timestamp, info=information, normalise=self.normalise)
+        return serialise_hs00(hs_dict)
 
     def send_histogram(self, topic, histogram: DatFileCommon, timestamp: int = 0, information: str = ""):
         """
