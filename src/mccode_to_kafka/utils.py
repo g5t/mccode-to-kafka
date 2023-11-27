@@ -14,4 +14,5 @@ def ns_since_epoch_to_datetime(ns: int) -> datetime:
 
 
 def now_in_ns_since_epoch() -> int:
-    return datetime_to_ns_since_epoch(datetime.now())
+    from datetime import timezone
+    return datetime_to_ns_since_epoch(datetime.now(timezone.utc))
