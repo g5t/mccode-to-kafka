@@ -11,17 +11,19 @@ class WriterTestCase(unittest.TestCase):
         source = 'source'
         topic = 'topic'
         expected = {
-            "topic": topic,
-            "source": source,
             "module": 'hs00',
-            "data_type": 'double',
-            "error_type": 'double',
-            "edge_type": 'double',
-            "shape": [x]
+            "config": {
+                "topic": topic,
+                "source": source,
+                "data_type": 'double',
+                "error_type": 'double',
+                "edge_type": 'double',
+                "shape": [x]
+            }
         }
         structure = nexus_structure(source=source, topic=topic, shape=[x])
         self.assertEqual(json.dumps(structure), json.dumps(expected))
-        self.assertTrue(allclose(structure['shape'][0]['edges'], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))
+        self.assertTrue(allclose(structure['config']['shape'][0]['edges'], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))
 
     def test_nexus_structure_2d(self):
         """This exists mostly to illustrate the expected use case of the writer module for 2D histograms"""
@@ -31,13 +33,15 @@ class WriterTestCase(unittest.TestCase):
                  edge(12, 1, 3, 'y', 'angstrom', 'y_axis')]
         topic = 'topic'
         expected = {
-            "topic": topic,
-            "source": 'mccode-to-kafka',
             "module": 'hs00',
-            "data_type": 'double',
-            "error_type": 'double',
-            "edge_type": 'double',
-            "shape": shape
+            "config": {
+                "topic": topic,
+                "source": 'mccode-to-kafka',
+                "data_type": 'double',
+                "error_type": 'double',
+                "edge_type": 'double',
+                "shape": shape
+            }
         }
         self.assertEqual(json.dumps(nexus_structure(topic, shape)), json.dumps(expected))
 

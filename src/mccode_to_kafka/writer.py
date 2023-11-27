@@ -45,12 +45,18 @@ def nexus_structure(topic: str, shape: list[dict], source: str = None, module: s
     error_type = 'double'
     edge_type = 'double'
 
+    # Per the examples section of
+    # https://github.com/ess-dmsc/kafka-to-nexus/blob/e988004d9fb9fd349715f125836d35aaf8693e42/documentation/writer_module_hs00_event_histogram.md
+    # The returned dictionary should contain only a 'module' and 'config' key with the configuration data
+    # The 'config' key should contain the following keys: topic, source, data_type, error_type, edge_type, shape
     return {
-        "topic": topic,
-        "source": source,
         "module": module,
-        "data_type": data_type,
-        "error_type": error_type,
-        "edge_type": edge_type,
-        "shape": shape
+        "config": {
+            "topic": topic,
+            "source": source,
+            "data_type": data_type,
+            "error_type": error_type,
+            "edge_type": edge_type,
+            "shape": shape
+        }
     }
