@@ -159,6 +159,7 @@ class FileWriter:
         logfile = Path().cwd().joinpath('logs', f'{self.name}.txt')
         if not logfile.parent.exists():
             logfile.parent.mkdir(parents=True)
+
         self.proc.terminate()
         self.proc.wait()
         output, errors = self.proc.communicate(input=None, timeout=10)
@@ -198,6 +199,13 @@ def register_topics(broker, topics):
             print(f"Failed to create topic {topic}: {e}")
 
 
+def send_one_d_monitor(file_contents: str, topic: str):
+    from mccode_to_kafka.histogram import create_histogram_sink
+    sink = create_histogram_sink(dict(data_brokers=[BROKER], source='mccode-to-kafka'), dict())
+    dat = load_dat_string(file_contents, f'{topic}.dat')
+    sink.send_histogram(topic, dat, information=f'topic {topic} from mccode-to-kafka')  # timestamped as now_in_ns_since_epoch
+
+
 class HDF5OutputTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -229,6 +237,9 @@ class HDF5OutputTestCase(unittest.TestCase):
         self.file_path = Path('output-files').joinpath(f'{name}.nxs')
         if not self.file_path.parent.exists():
             self.file_path.parent.mkdir(parents=True)
+
+        if self.file_path.exists():
+            self.skipTest(f'{self.file_path} already exists -- remove file to run test')
 
         self.workers = WorkerJobPool(
             job_topic_url=f"{BROKER}/TEST_writer_jobs",
@@ -281,38 +292,25 @@ class HDF5OutputTestCase(unittest.TestCase):
     def test_structure_1d(self):
         from file_writer_control import WriteJob
         from mccode_to_kafka.writer import nexus_structure, edge
-        from mccode_to_kafka.histogram import create_histogram_sink
         from datetime import datetime, timezone
         from time import sleep
         from json import dumps
+        import h5py
         self.wait_for_writers(idle=1)
         write_from = datetime.now(timezone.utc)
 
-        shape = [edge(3, -1, 2, 'x', 'm', 'x')]
-        structure = nexus_structure(topic='monitor_0', shape=shape)
-        data_group = dict(type="group", name="hist_data", children=[structure])
-        entry = dict(type='group', name='entry', children=[data_group],
+        structure = nexus_structure(topic='monitor_0', shape=[edge(3, -1, 2, 'x', 'm', 'x')])
+        entry = dict(type='group', name='entry', 
+                     children=[dict(type="group", name="hist_data", children=[structure])],
                      attributes=[dict(name='NX_class', values='NXentry')])
         nx_structure = dict(children=[entry],)
 
-        print(f'Use nexus structure:\n{nx_structure}')
-
-        config = dict(data_brokers=[BROKER], source='mccode-to-kafka')
-        security_config = dict()
-        sink = create_histogram_sink(config, security_config)
-
-        dat = load_dat_string(ONE_D_MONITOR, 'monitor_0.dat')
-
-        print(f'Send data for 1-D histogram\n{dat}')
-
-        sink.send_histogram('monitor_0', dat, information='Monitor 0')  # timestamped as now_in_ns_since_epoch
+        send_one_d_monitor(ONE_D_MONITOR, 'monitor_0')
 
         # sleep to ensure the histogram is sent?
         sleep(1)
 
         write_until = datetime.now(timezone.utc)
-
-        print(f'Write-out job from {write_from} until {write_until}')
 
         job = WriteJob(nexus_structure=dumps(nx_structure),
                        file_name=self.file_path.as_posix(),
@@ -324,7 +322,21 @@ class HDF5OutputTestCase(unittest.TestCase):
         self.wait_for_job(job)
         self.wait_for_writers(busy=0)
 
-        print(f'We should now have a file at {self.file_path}')
+        # in lieu of actually waiting for the writer to close-out the file... 
+        sleep(10)
+
+        with self.file_path.open('r') as file:
+          self.assertEqual(len(list(file)), 1)
+          self.assertTrue('entry' in list(file))
+          self.assertEqual(len(list(file['entry'])), 1)
+          self.assertTrue('hist_data' in list(file['entry']))
+          #
+          hist_data = file['entry/hist_data']
+          self.assertEqual(len(list(hist_data)), 3)
+          for name, nx_type in (('histogram', 'NXdata'), ('info', 'NXlog'), ('message_full', 'NXlog')):
+            self.assertTrue(name in hist_data)
+            self.assertTrue('NX_type' in hist_data[name].attrs)
+            self.assertEqual(hist_data.attrs['NX_type'], nx_type)
 
 
 if __name__ == '__main__':
