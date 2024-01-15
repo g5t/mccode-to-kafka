@@ -16,7 +16,7 @@ dynamic = ["version"]
 mccode-to-kafka = "mccode_to_kafka.sender:command_line_send"
 
 [project.optional-dependencies]
-test = ["pytest", "mock", "flake8-pyproject"]
+test = ["pytest", "mock", "flake8-pyproject", "file-writer-control"]
 
 [tool.setuptools_scm]
 
