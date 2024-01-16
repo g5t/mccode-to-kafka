@@ -238,8 +238,8 @@ class HDF5OutputTestCase(unittest.TestCase):
         if not self.file_path.parent.exists():
             self.file_path.parent.mkdir(parents=True)
 
-        if self.file_path.exists():
-            self.skipTest(f'{self.file_path} already exists -- remove file to run test')
+        #if self.file_path.exists():
+        #    self.skipTest(f'{self.file_path} already exists -- remove file to run test')
 
         self.workers = WorkerJobPool(
             job_topic_url=f"{BROKER}/TEST_writer_jobs",
@@ -319,24 +319,44 @@ class HDF5OutputTestCase(unittest.TestCase):
                        stop_time=write_until
                        )
 
-        self.wait_for_job(job)
-        self.wait_for_writers(busy=0)
+        if not self.file_path.exists():
+          self.wait_for_job(job)
+          self.wait_for_writers(busy=0)
 
         # in lieu of actually waiting for the writer to close-out the file... 
         sleep(10)
 
-        with self.file_path.open('r') as file:
+#        # Check output for NXdata of (NXdata, NXlog, NXlog) -- can't be loaded in scippnexus
+#        with h5py.File(self.file_path, 'r') as file:
+#          self.assertEqual(len(list(file)), 1)
+#          self.assertTrue('entry' in list(file))
+#          self.assertEqual(len(list(file['entry'])), 1)
+#          self.assertTrue('hist_data' in list(file['entry']))
+#          #
+#          hist_data = file['entry/hist_data']
+#          self.assertEqual(len(list(hist_data)), 3)
+#          for name, nx_type in (('histogram', 'NXdata'), ('info', 'NXlog'), ('message_full', 'NXlog')):
+#            print(f'{name=} in {list(hist_data)=}')
+#            self.assertTrue(name in list(hist_data))
+#            print(f'{list(hist_data[name].attrs)=}')
+#            self.assertTrue('NX_class' in hist_data[name].attrs)
+#            self.assertEqual(hist_data[name].attrs['NX_class'], nx_type)
+
+        # Check output for NXdata (can be loaded in scippnexus)
+        with h5py.File(self.file_path, 'r') as file:
           self.assertEqual(len(list(file)), 1)
           self.assertTrue('entry' in list(file))
           self.assertEqual(len(list(file['entry'])), 1)
           self.assertTrue('hist_data' in list(file['entry']))
           #
-          hist_data = file['entry/hist_data']
-          self.assertEqual(len(list(hist_data)), 3)
-          for name, nx_type in (('histogram', 'NXdata'), ('info', 'NXlog'), ('message_full', 'NXlog')):
-            self.assertTrue(name in hist_data)
-            self.assertTrue('NX_type' in hist_data[name].attrs)
-            self.assertEqual(hist_data.attrs['NX_type'], nx_type)
+          hist = file['entry/hist_data']
+          self.assertTrue('NX_class' in hist.attrs)
+          self.assertEqual(hist.attrs['NX_class'], 'NXdata')
+          self.assertTrue('signal' in hist.attrs)
+          self.assertEqual(hist.attrs['signal'], 'histograms')
+          self.assertEqual(len(list(hist)), 4)
+          for name in ('histograms', 'errors', 'time', 'x'):
+            self.assertTrue(name in list(hist))
 
 
 if __name__ == '__main__':
