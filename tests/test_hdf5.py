@@ -4,9 +4,10 @@ WRITER = None
 WRITER_COUNT = 2
 BROKER = 'localhost:9093'
 CONTROL_KAFKA = True
+CONTROL_WRITER = True
 SLEEP_TIME = 1.5
 CLIENT = None
-TOPICS = ['TEST_epicsConnectionStatus','TEST_sampleEnv', 'TEST_writer_jobs', 'TEST_writer_commands',
+TOPICS = ['TEST_epicsConnectionStatus', 'TEST_sampleEnv', 'TEST_writer_jobs', 'TEST_writer_commands',
           'TEST_writer_commands_alternative', 'TEST_forwarderConfig', 'TEST_forwarderStatusLR', 'TEST_forwarderDataLR'
           ]
 
@@ -37,7 +38,7 @@ ONE_D_MONITOR = """# Format: McCode with text headers
 # yvar: (I,I_err)
 # xlabel: Time-of-flight [\gms]
 # ylabel: Intensity
-# xlimits: -1 2
+# xlimits: -0.5 1.5
 # variables: t I I_err N
 -0.5 10.0 1.0 100.0
 0.5 20.0 2.0 200.0
@@ -96,6 +97,7 @@ class Singleton(type):
 
 class DockerClient(metaclass=Singleton):
     from pathlib import Path
+
     @staticmethod
     def client_name():
         from shutil import which
@@ -105,7 +107,7 @@ class DockerClient(metaclass=Singleton):
                 return command
         return None
 
-    def __init__(self, file_path : Path | str | None = None, up: dict | None = None, down: dict | None = None):
+    def __init__(self, file_path: Path | str | None = None, up: dict | None = None, down: dict | None = None):
         from python_on_whales import DockerClient
         if file_path is None:
             file_path = Path(__file__).parent.joinpath('docker-compose.yml')
@@ -145,12 +147,12 @@ class FileWriter:
             raise RuntimeError(f'No such executable {path}')
         opts = dict(status_master_interval='1500ms',
                     kafka_error_timeout='2s',
-                    verbosity='Trace',
+                    verbosity='trace',
                     job_pool_uri=f'{broker}/TEST_writer_jobs',
                     command_status_uri=f'{broker}/TEST_writer_commands',
                     service_name=name)
         self.name = name
-        command = [path] + [f"--{k.replace('_','-')}={v}" for k, v in opts.items()]
+        command = [path] + [f"--{k.replace('_', '-')}={v}" for k, v in opts.items()]
         self.proc = Popen(command, stdout=PIPE, text=True)
         print(f'File Writer {self.name} launched')
 
@@ -169,9 +171,11 @@ class FileWriter:
 
 class FileWriters(metaclass=Singleton):
     def __init__(self, executable, broker: str, count: int):
-        if executable:
+        if CONTROL_WRITER and executable:
+            print("Start up the file writers")
             self.writers = [FileWriter(executable, broker, f'file_writer_{i}') for i in range(count)]
         else:
+            print("No file writers started")
             self.writers = []
 
     def stop(self):
@@ -203,7 +207,8 @@ def send_one_d_monitor(file_contents: str, topic: str):
     from mccode_to_kafka.histogram import create_histogram_sink
     sink = create_histogram_sink(dict(data_brokers=[BROKER], source='mccode-to-kafka'), dict())
     dat = load_dat_string(file_contents, f'{topic}.dat')
-    sink.send_histogram(topic, dat, information=f'topic {topic} from mccode-to-kafka')  # timestamped as now_in_ns_since_epoch
+    sink.send_histogram(topic, dat,
+                        information=f'topic {topic} from mccode-to-kafka')  # timestamped as now_in_ns_since_epoch
 
 
 class HDF5OutputTestCase(unittest.TestCase):
@@ -234,11 +239,12 @@ class HDF5OutputTestCase(unittest.TestCase):
         from pathlib import Path
         from file_writer_control import WorkerJobPool
         name = self.id().split('.')[-1]
-        self.file_path = Path('output-files').joinpath(f'{name}.nxs')
+        # self.file_path = Path('__file__').parent.joinpath('output-files').joinpath(f'{name}.nxs').resolve()
+        self.file_path = Path(f'{name}.nxs')
         if not self.file_path.parent.exists():
             self.file_path.parent.mkdir(parents=True)
 
-        #if self.file_path.exists():
+        # if self.file_path.exists():
         #    self.skipTest(f'{self.file_path} already exists -- remove file to run test')
 
         self.workers = WorkerJobPool(
@@ -264,7 +270,7 @@ class HDF5OutputTestCase(unittest.TestCase):
                     sleep(1)
                 print(f"Job {job.job_id=} stopped")
 
-    def wait_for_writers(self, *, idle: int | None = None, busy: int | None = None, timeout: float = 10*SLEEP_TIME):
+    def wait_for_writers(self, *, idle: int | None = None, busy: int | None = None, timeout: float = 10 * SLEEP_TIME):
         from datetime import datetime, timedelta
         from time import sleep
         from file_writer_control.WorkerStatus import WorkerState
@@ -283,7 +289,7 @@ class HDF5OutputTestCase(unittest.TestCase):
         if datetime.now() > give_up_after:
             raise RuntimeError(f'Time-out waiting for {idle=} {busy=} workers')
 
-    def wait_for_job(self, job, timeout: float = 10*SLEEP_TIME):
+    def wait_for_job(self, job, timeout: float = 10 * SLEEP_TIME):
         from file_writer_control import JobHandler
         handler = JobHandler(worker_finder=self.workers)
         start_job = handler.start_job(job)
@@ -291,7 +297,7 @@ class HDF5OutputTestCase(unittest.TestCase):
 
     def test_structure_1d(self):
         from file_writer_control import WriteJob
-        from mccode_to_kafka.writer import nexus_structure, edge
+        from mccode_to_kafka.writer import da00_dataarray_config, da00_variable_config
         from datetime import datetime, timezone
         from time import sleep
         from json import dumps
@@ -299,13 +305,22 @@ class HDF5OutputTestCase(unittest.TestCase):
         self.wait_for_writers(idle=1)
         write_from = datetime.now(timezone.utc)
 
-        structure = nexus_structure(topic='monitor_0', shape=[edge(3, -1, 2, 'x', 'm', 'x')])
-        entry = dict(type='group', name='entry', 
-                     children=[dict(type="group", name="hist_data", children=[structure])],
-                     attributes=[dict(name='NX_class', values='NXentry')])
-        nx_structure = dict(children=[entry],)
+        signal = da00_variable_config(name='signal', unit='counts', axes=['t'], shape=[3], label="the signal",
+                                      data_type="float64")
+        errors = da00_variable_config(name='signal_errors', unit='counts', axes=['t'], shape=[3], label="the errors",
+                                      data_type="float64")
+        x = da00_variable_config(name='t', unit='microseconds', label='Time-of-flight', axes=['t'], shape=[4],
+                                 data={'first': -1.0, 'last': 2.0, 'size': 4})
+        config = da00_dataarray_config(topic='monitor_0', variables=[signal, errors], constants=[x],)
 
-        send_one_d_monitor(ONE_D_MONITOR, 'monitor_0')
+
+        entry = dict(type='group', name='entry',
+                     children=[dict(type="group", name="hist_data", children=[config])],
+                     attributes=[dict(name='NX_class', values='NXentry')])
+        nx_structure = dict(children=[entry], )
+
+        for _ in range(5):
+            send_one_d_monitor(ONE_D_MONITOR, 'monitor_0')
 
         # sleep to ensure the histogram is sent?
         sleep(1)
@@ -320,43 +335,45 @@ class HDF5OutputTestCase(unittest.TestCase):
                        )
 
         if not self.file_path.exists():
-          self.wait_for_job(job)
-          self.wait_for_writers(busy=0)
+            self.wait_for_job(job)
+            self.wait_for_writers(busy=0)
 
         # in lieu of actually waiting for the writer to close-out the file... 
         sleep(10)
 
-#        # Check output for NXdata of (NXdata, NXlog, NXlog) -- can't be loaded in scippnexus
-#        with h5py.File(self.file_path, 'r') as file:
-#          self.assertEqual(len(list(file)), 1)
-#          self.assertTrue('entry' in list(file))
-#          self.assertEqual(len(list(file['entry'])), 1)
-#          self.assertTrue('hist_data' in list(file['entry']))
-#          #
-#          hist_data = file['entry/hist_data']
-#          self.assertEqual(len(list(hist_data)), 3)
-#          for name, nx_type in (('histogram', 'NXdata'), ('info', 'NXlog'), ('message_full', 'NXlog')):
-#            print(f'{name=} in {list(hist_data)=}')
-#            self.assertTrue(name in list(hist_data))
-#            print(f'{list(hist_data[name].attrs)=}')
-#            self.assertTrue('NX_class' in hist_data[name].attrs)
-#            self.assertEqual(hist_data[name].attrs['NX_class'], nx_type)
+        #        # Check output for NXdata of (NXdata, NXlog, NXlog) -- can't be loaded in scippnexus
+        #        with h5py.File(self.file_path, 'r') as file:
+        #          self.assertEqual(len(list(file)), 1)
+        #          self.assertTrue('entry' in list(file))
+        #          self.assertEqual(len(list(file['entry'])), 1)
+        #          self.assertTrue('hist_data' in list(file['entry']))
+        #          #
+        #          hist_data = file['entry/hist_data']
+        #          self.assertEqual(len(list(hist_data)), 3)
+        #          for name, nx_type in (('histogram', 'NXdata'), ('info', 'NXlog'), ('message_full', 'NXlog')):
+        #            print(f'{name=} in {list(hist_data)=}')
+        #            self.assertTrue(name in list(hist_data))
+        #            print(f'{list(hist_data[name].attrs)=}')
+        #            self.assertTrue('NX_class' in hist_data[name].attrs)
+        #            self.assertEqual(hist_data[name].attrs['NX_class'], nx_type)
 
+        # TODO continue from here:
         # Check output for NXdata (can be loaded in scippnexus)
         with h5py.File(self.file_path, 'r') as file:
-          self.assertEqual(len(list(file)), 1)
-          self.assertTrue('entry' in list(file))
-          self.assertEqual(len(list(file['entry'])), 1)
-          self.assertTrue('hist_data' in list(file['entry']))
-          #
-          hist = file['entry/hist_data']
-          self.assertTrue('NX_class' in hist.attrs)
-          self.assertEqual(hist.attrs['NX_class'], 'NXdata')
-          self.assertTrue('signal' in hist.attrs)
-          self.assertEqual(hist.attrs['signal'], 'histograms')
-          self.assertEqual(len(list(hist)), 4)
-          for name in ('histograms', 'errors', 'time', 'x'):
-            self.assertTrue(name in list(hist))
+            self.assertEqual(len(list(file)), 1)
+            self.assertTrue('entry' in list(file))
+            self.assertEqual(len(list(file['entry'])), 1)
+            self.assertTrue('hist_data' in list(file['entry']))
+            #
+            hist = file['entry/hist_data']
+            self.assertTrue('NX_class' in hist.attrs)
+            self.assertEqual(hist.attrs['NX_class'], 'NXlog')
+            # self.assertTrue('signal' in hist.attrs)
+            # self.assertEqual(hist.attrs['signal'], 'histograms')
+            expected = ('signal', 'signal_errors', 't', 'time', 'cue_index', 'cue_timestamp_zero')
+            self.assertEqual(len(list(hist)), len(expected))
+            for name in expected:
+                self.assertTrue(name in list(hist))
 
 
 if __name__ == '__main__':
@@ -364,15 +381,20 @@ if __name__ == '__main__':
     from os import access, X_OK
     from argparse import ArgumentParser
     from pathlib import Path
+
     parser = ArgumentParser()
     parser.add_argument('--broker', default='')
     parser.add_argument('--build-path', default='')
+    parser.add_argument('--external-writer', action='store_true')
     parser.add_argument('unittest_arguments', nargs='*')
 
     parsed_args = parser.parse_args()
     if parsed_args.broker and len(parsed_args.broker):
         CONTROL_KAFKA = False
         BROKER = parsed_args.broker
+
+    if parsed_args.external_writer:
+        CONTROL_WRITER = False
 
     if parsed_args.build_path and len(parsed_args.build_path):
         writer = Path(parsed_args.build_path)
@@ -384,4 +406,3 @@ if __name__ == '__main__':
             print(f'Specified writer binary {writer} does not exist')
 
     unittest.main(argv=[sys.argv[0]] + parsed_args.unittest_arguments)
-

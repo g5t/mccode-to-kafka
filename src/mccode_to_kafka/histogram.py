@@ -1,3 +1,4 @@
+from  datetime import datetime
 from .datfile import DatFileCommon
 
 
@@ -15,7 +16,7 @@ class HistogramSink:
         self.source = source_name
         self.normalise = normalise
 
-    def serialise_function(self, histogram: DatFileCommon, timestamp: int, information: str):
+    def serialise_function(self, histogram: DatFileCommon, timestamp: datetime | int, information: str):
         """
         Serialise a histogram as a hs01 FlatBuffers message.
 
@@ -24,9 +25,11 @@ class HistogramSink:
         :param information: Information to write to the 'info' field.
         :return: The raw buffer of the FlatBuffers message.
         """
-        from streaming_data_types.histogram_hs00 import serialise_hs00
-        hs_dict = histogram.to_hs00_dict(source=self.source, time=timestamp, info=information, normalise=self.normalise)
-        return serialise_hs00(hs_dict)
+        from streaming_data_types.dataarray_da00 import serialise_da00
+        da_dict = histogram.to_da00_dict(source=self.source, timestamp=timestamp, info=information,
+                                         normalise=self.normalise)
+        print(da_dict)
+        return serialise_da00(**da_dict)
 
     def send_histogram(self, topic, histogram: DatFileCommon, timestamp: int = 0, information: str = ""):
         """

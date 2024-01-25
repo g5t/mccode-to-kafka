@@ -1,6 +1,19 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 from numpy import ndarray
+from datetime import datetime
+
+
+def dim_metadata(length, label_unit, lower_limit, upper_limit) -> dict:
+    from numpy import linspace
+    parts = label_unit.split(' ')
+    label = ' '.join(parts[:-1])
+    unit = parts[-1].strip('[] ')
+    if '\\gms' == unit:
+        unit = 'microseconds'
+    bin_width = (upper_limit - lower_limit) / (length - 1)
+    boundaries = linspace(lower_limit - bin_width / 2, upper_limit + bin_width / 2, length + 1)
+    return dict(length=length, label=label, unit=unit, bin_boundaries=boundaries)
 
 
 @dataclass
@@ -10,6 +23,12 @@ class DatFileCommon:
     parameters: dict = field(default_factory=dict)
     variables: list[str] = field(default_factory=list)
     data: ndarray = field(default_factory=ndarray)
+    id: int | None = None
+
+    def __post_init__(self):
+        if self.id is None:
+            from uuid import uuid4
+            self.id = hash(uuid4())
 
     @classmethod
     def from_filename(cls, filename: str):
@@ -47,47 +66,52 @@ class DatFileCommon:
         else:
             raise KeyError(f'Unknown key {item}')
 
-    def dim_metadata(self) -> list[dict]:
+    def meta_dim_metadata(self, functor) -> list[dict]:
         pass
 
-    def to_hs_dict(self, source: str = None, info: str = None, time: int = None, normalise: bool = False):
-        """Produce a dictionary suitable for serialising to HS00 or HS01 via ess-streaming-data-types"""
+    def dim_metadata(self) -> list[dict]:
+        return self.meta_dim_metadata(dim_metadata)
+
+    def _to_partial_dict(self, source: str = None, time: int = None, normalise: bool = False):
         from .utils import now_in_ns_since_epoch
         from numpy import geterr, seterr
         hs = dict(source=source or str(self.source), timestamp=time or now_in_ns_since_epoch())
-        if info:
-            hs['info'] = info
-
         # We want to ignore division by zero errors, since N == 0 is a valid case indicating no counts
         invalid = geterr()['invalid']
         seterr(invalid='ignore')
         hs['data'] = self['I'] / self['N'] if normalise else self['I']
         hs['errors'] = self['I_err'] / self['N'] if normalise else self['I_err']
         seterr(invalid=invalid)
-
-        hs['current_shape'] = list(hs['data'].shape)
-        hs['dim_metadata'] = self.dim_metadata()
         return hs
 
-    def to_hs01_dict(self, source: str = None, info: str = None, time: int = None, normalise: bool = False):
-        # any integer values are allowed to be signed for HS01
-        return self.to_hs_dict(source=source, info=info, time=time, normalise=normalise)
+    def dim_variable_dicts(self) -> list[dict]:
+        pass
 
-    def to_hs00_dict(self, source: str = None, info: str = None, time: int = None, normalise: bool = False):
-        # integer values must be unsigned for HS00 -- but that should be the case already, so ignore it?
-        return self.to_hs_dict(source=source, info=info, time=time, normalise=normalise)
+    def to_da00_variables(self, normalise: bool = False):
+        from streaming_data_types.dataarray_da00 import Variable
+        pd = self._to_partial_dict(normalise=normalise)
+        constants = self.to_da00_constants()
+        axes = [ax.name for ax in constants]
+        variables = [Variable(name='signal', data=pd['data'], axes=axes, unit='counts'),
+                     Variable(name='signal_errors', data=pd['errors'], axes=axes, unit='counts')]
+        return variables, constants
 
+    def to_da00_constants(self):
+        from streaming_data_types.dataarray_da00 import Variable
+        constants = [
+            Variable(name=x['name'], data=x['bin_boundaries'], axes=[x['name']], unit=x['unit'], label=x['label'])
+            for x in self.dim_variable_dicts()]
+        return constants
 
-def dim_metadata(length, label_unit, lower_limit, upper_limit) -> dict:
-    from numpy import linspace
-    parts = label_unit.split(' ')
-    label = ' '.join(parts[:-1])
-    unit = parts[-1].strip('[] ')
-    if '\\gms' == unit:
-        unit = 'microseconds'
-    bin_width = (upper_limit - lower_limit) / (length - 1)
-    boundaries = linspace(lower_limit - bin_width / 2, upper_limit + bin_width / 2, length + 1)
-    return dict(length=length, label=label, unit=unit, bin_boundaries=boundaries)
+    def to_da00_dict(self, source: str, timestamp: datetime | None = None, normalise: bool = False, info: str | None = None):
+        from datetime import timezone
+        from streaming_data_types.dataarray_da00 import Variable
+        attributes = [Variable(name="producer", data="mccode-to-kafka")]
+        if info is not None:
+            attributes.append(Variable(name="info", data=info, source="mccode-to-kafka"))
+        variables, constants = self.to_da00_variables(normalise=normalise)
+        return dict(source_name=source, timestamp=timestamp or datetime.now(timezone.utc),
+                    variables=variables, constants=constants, attributes=attributes)
 
 
 @dataclass
@@ -100,9 +124,15 @@ class DatFile1D(DatFileCommon):
         # we always want the variables along the first dimension:
         self.data = self.data.transpose((1, 0))
 
-    def dim_metadata(self) -> list[dict]:
+    def meta_dim_metadata(self, functor) -> list[dict]:
         lower_limit, upper_limit = [float(x) for x in self['xlimits'].split()]
-        return [dim_metadata(self.data.shape[1], self['xlabel'], lower_limit, upper_limit), ]
+        return [functor(self.data.shape[1], self['xlabel'], lower_limit, upper_limit), ]
+
+    def dim_variable_dicts(self) -> list[dict]:
+        md = self.meta_dim_metadata(dim_metadata)
+        md[0]['name'] = self['xvar']
+        return md
+
 
 
 @dataclass
@@ -115,10 +145,16 @@ class DatFile2D(DatFileCommon):
             raise RuntimeError(f'Expected {ny*nv =} by {nx =} but have {self.data.shape}')
         self.data = self.data.reshape((nv, ny, nx))
 
-    def dim_metadata(self) -> list[dict]:
+    def meta_dim_metadata(self, functor) -> list[dict]:
         lower_x, upper_x, lower_y, upper_y = [float(x) for x in self['xylimits'].split()]
-        return [dim_metadata(self.data.shape[2], self['xlabel'], lower_x, upper_x),
-                dim_metadata(self.data.shape[1], self['ylabel'], lower_y, upper_y)]
+        return [functor(self.data.shape[2], self['xlabel'], lower_x, upper_x),
+                functor(self.data.shape[1], self['ylabel'], lower_y, upper_y)]
+
+    def dim_variable_dicts(self) -> list[dict]:
+        md = self.meta_dim_metadata(dim_metadata)
+        md[0]['name'] = self['xvar']
+        md[1]['name'] = self['yvar']
+        return md
 
 
 def read_mccode_dat(filename: str):

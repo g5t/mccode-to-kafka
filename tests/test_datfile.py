@@ -1,5 +1,4 @@
 import unittest
-import mock
 from pathlib import Path
 
 # Importantly, this string must not start or end with a blank line!
@@ -139,6 +138,7 @@ TWO_D_MONITOR = """# Format: McCode with text headers
 
 class DatFileTestCase(unittest.TestCase):
     def setUp(self):
+        import mock
         exists_patcher = mock.patch('pathlib.Path.exists')
         mock_exists = exists_patcher.start()
         mock_exists.return_value = True
@@ -147,10 +147,12 @@ class DatFileTestCase(unittest.TestCase):
         mock_is_file.return_value = True
 
     def tearDown(self):
+        import mock
         mock.patch.stopall()
 
     @staticmethod
     def _load_dat_string(string, filename):
+        import mock
         from mccode_to_kafka.datfile import read_mccode_dat
         mock_open = mock.mock_open(read_data=string)
 
@@ -197,23 +199,23 @@ class DatFileTestCase(unittest.TestCase):
         for a, b in zip(x_dim_metadata['bin_boundaries'], dim_metadata['bin_boundaries']):
             self.assertAlmostEqual(a, b)
 
-    def test_hs01_dict_1d(self):
-        from mccode_to_kafka.utils import now_in_ns_since_epoch
-        from numpy import isnan
-        dat = self._load_dat_string(ONE_D_MONITOR, 'filename.dat')
-        now = now_in_ns_since_epoch()
-
-        for normalise in (True, False):
-            hs01 = dat.to_hs01_dict(info='free text', time=now, normalise=normalise)
-            self.assertEqual(hs01['source'], str(Path(__file__).parent.joinpath('filename.dat')))
-            self.assertEqual(hs01['info'], 'free text')
-            self.assertEqual(hs01['timestamp'], now)
-            for x, y in (('data', 'I'), ('errors', 'I_err')):
-                for d, i, n in zip(hs01[x], dat[y], dat['N']):
-                    if normalise and n == 0:
-                        self.assertTrue(isnan(d))
-                    else:
-                        self.assertEqual(d, i/n if normalise else i)
+    # def test_hs01_dict_1d(self):
+    #     from mccode_to_kafka.utils import now_in_ns_since_epoch
+    #     from numpy import isnan
+    #     dat = self._load_dat_string(ONE_D_MONITOR, 'filename.dat')
+    #     now = now_in_ns_since_epoch()
+    #
+    #     for normalise in (True, False):
+    #         hs01 = dat.to_hs01_dict(info='free text', time=now, normalise=normalise)
+    #         self.assertEqual(hs01['source'], str(Path(__file__).parent.joinpath('filename.dat')))
+    #         self.assertEqual(hs01['info'], 'free text')
+    #         self.assertEqual(hs01['timestamp'], now)
+    #         for x, y in (('data', 'I'), ('errors', 'I_err')):
+    #             for d, i, n in zip(hs01[x], dat[y], dat['N']):
+    #                 if normalise and n == 0:
+    #                     self.assertTrue(isnan(d))
+    #                 else:
+    #                     self.assertEqual(d, i/n if normalise else i)
 
     def test_load_2d(self):
         from mccode_to_kafka.datfile import DatFile2D
@@ -253,21 +255,21 @@ class DatFileTestCase(unittest.TestCase):
         for a, b in zip(dat_y_metadata['bin_boundaries'], y_dim_metadata['bin_boundaries']):
             self.assertAlmostEqual(a, b)
 
-    def test_hs01_dict_2d(self):
-        from numpy import isnan
-        dat = self._load_dat_string(TWO_D_MONITOR, 'data.dat')
-        for normalise in (True, False):
-            hs01 = dat.to_hs01_dict(source='not a filename', normalise=normalise)
-            self.assertEqual(hs01['source'], 'not a filename')
-            self.assertTrue('info' not in hs01)
-            self.assertTrue(hs01['current_shape'], (20, 20))
-            for x, y in (('data', 'I'), ('errors', 'I_err')):
-                for vd, vi, vn in zip(hs01[x], dat[y], dat['N']):
-                    for d, i, n in zip(vd, vi, vn):
-                        if normalise and n == 0:
-                            self.assertTrue(isnan(d))
-                        else:
-                            self.assertEqual(d, i/n if normalise else i)
+    # def test_hs01_dict_2d(self):
+    #     from numpy import isnan
+    #     dat = self._load_dat_string(TWO_D_MONITOR, 'data.dat')
+    #     for normalise in (True, False):
+    #         hs01 = dat.to_hs01_dict(source='not a filename', normalise=normalise)
+    #         self.assertEqual(hs01['source'], 'not a filename')
+    #         self.assertTrue('info' not in hs01)
+    #         self.assertTrue(hs01['current_shape'], (20, 20))
+    #         for x, y in (('data', 'I'), ('errors', 'I_err')):
+    #             for vd, vi, vn in zip(hs01[x], dat[y], dat['N']):
+    #                 for d, i, n in zip(vd, vi, vn):
+    #                     if normalise and n == 0:
+    #                         self.assertTrue(isnan(d))
+    #                     else:
+    #                         self.assertEqual(d, i/n if normalise else i)
 
 
 if __name__ == '__main__':
