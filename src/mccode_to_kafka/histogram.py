@@ -8,7 +8,7 @@ class HistogramSink:
         Constructor.
 
         :param producer: The underlying Kafka producer to publish to.
-        :param source_name: The source identifier for produced Histogram hs00 messages
+        :param source_name: The source identifier for produced da00 messages
         """
         if producer is None:
             raise Exception("Histogram sink must have a producer")  # pragma: no mutate
