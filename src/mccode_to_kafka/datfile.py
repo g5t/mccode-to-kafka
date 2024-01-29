@@ -94,7 +94,7 @@ class DatFileCommon:
         axes = [ax.name for ax in constants]
         variables = [Variable(name='signal', data=pd['data'], axes=axes, unit='counts'),
                      Variable(name='signal_errors', data=pd['errors'], axes=axes, unit='counts')]
-        return variables, constants
+        return variables + constants
 
     def to_da00_constants(self):
         from streaming_data_types.dataarray_da00 import Variable
@@ -106,12 +106,11 @@ class DatFileCommon:
     def to_da00_dict(self, source: str, timestamp: datetime | None = None, normalise: bool = False, info: str | None = None):
         from datetime import timezone
         from streaming_data_types.dataarray_da00 import Variable
-        attributes = [Variable(name="producer", data="mccode-to-kafka")]
+        data = self.to_da00_variables(normalise=normalise)
+        data.append(Variable(name="producer", data="mccode-to-kafka"))
         if info is not None:
-            attributes.append(Variable(name="info", data=info, source="mccode-to-kafka"))
-        variables, constants = self.to_da00_variables(normalise=normalise)
-        return dict(source_name=source, timestamp=timestamp or datetime.now(timezone.utc),
-                    variables=variables, constants=constants, attributes=attributes)
+            data.append(Variable(name="info", data=info, source="mccode-to-kafka"))
+        return dict(source_name=source, timestamp=timestamp or datetime.now(timezone.utc), data=data)
 
 
 @dataclass
