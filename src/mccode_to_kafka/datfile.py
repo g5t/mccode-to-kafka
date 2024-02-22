@@ -146,13 +146,14 @@ class DatFile2D(DatFileCommon):
 
     def meta_dim_metadata(self, functor) -> list[dict]:
         lower_x, upper_x, lower_y, upper_y = [float(x) for x in self['xylimits'].split()]
-        return [functor(self.data.shape[2], self['xlabel'], lower_x, upper_x),
-                functor(self.data.shape[1], self['ylabel'], lower_y, upper_y)]
+        # The order here should match the order of the dimensions in self.data!
+        return [functor(self.data.shape[1], self['ylabel'], lower_y, upper_y),
+                functor(self.data.shape[2], self['xlabel'], lower_x, upper_x)]
 
     def dim_variable_dicts(self) -> list[dict]:
         md = self.meta_dim_metadata(dim_metadata)
-        md[0]['name'] = self['xvar']
-        md[1]['name'] = self['yvar']
+        md[0]['name'] = self['yvar']
+        md[1]['name'] = self['xvar']
         return md
 
 

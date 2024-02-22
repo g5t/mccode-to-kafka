@@ -246,7 +246,7 @@ class DatFileTestCase(unittest.TestCase):
         bin_boundaries = [lower_limit - bin_width/2 + x * bin_width for x in range(20)] + [upper_limit + bin_width / 2]
         x_dim_metadata = {'length': 20, 'label': 'X position', 'unit': 'cm', 'bin_boundaries': bin_boundaries}
         y_dim_metadata = {'length': 20, 'label': 'Y position', 'unit': 'cm', 'bin_boundaries': bin_boundaries}
-        dat_x_metadata, dat_y_metadata = dat.dim_metadata()
+        dat_y_metadata, dat_x_metadata = dat.dim_metadata()  # metadata dimension order matches data
         for key in ('length', 'label', 'unit'):
             self.assertEqual(dat_x_metadata[key], x_dim_metadata[key])
             self.assertEqual(dat_y_metadata[key], y_dim_metadata[key])
