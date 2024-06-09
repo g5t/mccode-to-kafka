@@ -104,13 +104,15 @@ class DatFileCommon:
         return constants
 
     def to_da00_dict(self, source: str, timestamp: datetime | None = None, normalise: bool = False, info: str | None = None):
-        from datetime import timezone
+        import time
         from streaming_data_types.dataarray_da00 import Variable
         data = self.to_da00_variables(normalise=normalise)
         data.append(Variable(name="producer", data="mccode-to-kafka"))
         if info is not None:
             data.append(Variable(name="info", data=info, source="mccode-to-kafka"))
-        return dict(source_name=source, timestamp=timestamp or datetime.now(timezone.utc), data=data)
+        # the da00 serializer takes a timestamp _in_ nanoseconds
+        timestamp_ns = int(timestamp.timestamp() * 1e9) if timestamp is not None else time.time_ns()
+        return dict(source_name=source, timestamp_ns=timestamp_ns, data=data)
 
 
 @dataclass

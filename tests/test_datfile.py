@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 
 # Importantly, this string must not start or end with a blank line!
-ONE_D_MONITOR = """# Format: McCode with text headers
+ONE_D_MONITOR = r"""# Format: McCode with text headers
 # URL: http://www.mccode.org
 # Creator: McStas
 # Instrument: 
@@ -177,7 +177,7 @@ class DatFileTestCase(unittest.TestCase):
         self.assertEqual(dat['values'], '3.34694e+09 1.41799e+08 1380')
         self.assertEqual(dat['xvar'], 't')
         self.assertEqual(dat['yvar'], '(I,I_err)')
-        self.assertEqual(dat['xlabel'], 'Time-of-flight [\gms]')
+        self.assertEqual(dat['xlabel'], r'Time-of-flight [\gms]')
         self.assertEqual(dat['ylabel'], 'Intensity')
         self.assertEqual(dat['xlimits'], '2030.659785 5234.044652')
         self.assertEqual(dat['variables'], 't I I_err N')
