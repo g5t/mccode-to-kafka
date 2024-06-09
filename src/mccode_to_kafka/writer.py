@@ -1,62 +1,86 @@
-"""The kafka-to-nexus file writer must be configured to include streamed histogram data in the output file.
-
-As noted at https://github.com/ess-dmsc/kafka-to-nexus/blob/main/documentation/writer_module_hs00_event_histogram.md
-the NeXus Structure JSON must include
-    - topic             # the Kafka topic to subscribe to
-    - source            # the Kafka source name to use for monitors
-    - module            # the streaming-data-type module used for serialisation -- this must be 'hs00' at the moment
-    - data_type         # the signal data type, one of ('uint32', 'uint64', 'float', or 'double')
-    - error_type        # the error data type, one of ('uint32', 'uint64', 'float', or 'double')
-    - edge_type         # the bin-edge values data type, one of ('uint32', 'uint64', 'float', or 'double')
-    - shape             # A list of JSON objects with the following keys:
-        - size            # the number of bins in this dimension, must be an integer value
-        - label           # the label for this dimension
-        - unit            # the unit for this dimension
-        - edges           # the bin-edge values for this dimension, should be one longer than `size`
-        - dataset_name    # the name of the dataset to write to in the NeXus file (TODO verify what this does)
-"""
-
-# It might be nice to re-use `DatFileCommon` and its subclasses for this, but they rely heavily on construction from
-# McStas/McXtrace written .dat files; and writing even a fake file in a string is potentially dangerous for a user.
+"""The kafka-to-nexus file writer must be configured to include streamed histogram data in the output file."""
 
 
-def edge(bins: int, lower: float, upper: float, label: str, unit: str, name: str):
-    from numpy import linspace
-    return {
-        "size": bins,
-        "label": label,
-        "unit": unit,
-        "edges": linspace(lower, upper, bins + 1).tolist(),
-        "dataset_name": name
-    }
+def da00_dataarray_config(topic: str,
+                          source: str | None = None,
+                          variables: list[dict] | None = None,
+                          constants: list[dict] | None = None,
+                          attrs: list[dict] | None = None,
+                          signal: str | None = None,
+                          axes: list[str] | None = None
+                          ) -> dict:
+    """
+    Construct a JSON object dict representing the configuration of the `da00` file writer module
+
+    :param topic: The Kafka stream name for the writer to read from
+    :param source: The producer name, `'kafka-to-nexus'` if not provided
+    :param variables: The configurations of time-dependent datasets, as JSON object dicts as produced by
+                    `da00_dataset_nexus_structure`
+    :param constants: The configurations of time-independent datasets, as JSON object dicts as produced by
+                    `da00_dataset_nexus_structure`
+    :param attrs: A list of {name: , value:, ...} attribute dictionaries for inclusion in the group attributes
+    :param signal: A special attribute that is the name of the 'signal' dataset
+    :param axes: A special attribute that is the list of axes names for the 'signal' dataset
+    :return: A JSON object dict suitable for inclusion in a NeXus Structure
+    """
+    config = {'topic': topic, 'source': source or 'mccode-to-kafka'}
+    if variables is not None:
+        config['variables'] = variables
+    if constants is not None:
+        config['constants'] = constants
+    if attrs is not None:
+        config['attributes'] = attrs
+    if (signal is not None or axes is not None) and 'attributes' not in config:
+        config['attributes'] = []
+    if signal is not None:
+        config['attributes'].append({'name': 'signal', 'value': signal})
+    if axes is not None:
+        config['attributes'].append({'name': 'axes', 'value': axes})
+    return {'module': 'da00', 'config': config}
 
 
-def nexus_structure(topic: str, shape: list[dict], source: str = None, module: str = None):
-    if source is None:
-        # By default, we should enforce a common 'source' name for all histograms in this module
-        source = 'mccode-to-kafka'
-    if module is None:
-        # for now at least, only hs00 is possible, so we can hard code it
-        module = 'hs00'
+def da00_variable_config(name: str,
+                         unit: str | None = None,
+                         label: str | None = None,
+                         source: str | None = None,
+                         data_type: str | None = None,
+                         axes: list[str] | None = None,
+                         shape: list[int] | None = None,
+                         data: list | dict | None = None,
+                         ):
+    """
+    Return a JSON object dict representing a dataset suitable for use in a NeXus Structure specification
 
-    # McStas/McXtrace dat files *always* print data as floating point values, even if they are actually integers.
-    # And the DatFileCommon reader uses `float` to convert the data block, which produces IEEE 754 64-bit floats
-    data_type = 'double'
-    error_type = 'double'
-    edge_type = 'double'
-
-    # Per the examples section of
-    # https://github.com/ess-dmsc/kafka-to-nexus/blob/e988004d9fb9fd349715f125836d35aaf8693e42/documentation/writer_module_hs00_event_histogram.md
-    # The returned dictionary should contain only a 'module' and 'config' key with the configuration data
-    # The 'config' key should contain the following keys: topic, source, data_type, error_type, edge_type, shape
-    return {
-        "module": module,
-        "config": {
-            "topic": topic,
-            "source": source,
-            "data_type": data_type,
-            "error_type": error_type,
-            "edge_type": edge_type,
-            "shape": shape
-        }
-    }
+    :param name: the name of the dataset
+    :param unit: the unit of its values, optional
+    :param label: a descriptive label for the dataset, optional
+    :param source: the identifier for the source of this dataset, optional
+    :param data_type: the element type of the data, the provided string should be
+                      in (int8, int16, int32, int64, uint8, uint16, uint32, uint64, float32, float64, c_string)
+    :param axes: the _names_ of the dimensions of the dataset, e.g., ['x', 'time'], optional
+    :param shape: the _sizes_ of the dimensions of the dataset, e.g., [10, 15], optional
+    :param data: the C-ordered flattened array of the _fixed_ values of the dataset, _or_ a JSON object dict
+                 representing the 'linspace' of the values {'first': #, 'last': #, 'size': #}, optional
+    :return: the JSON object dictionary suitable for serialization
+    """
+    config = {'name': name}
+    if unit is not None:
+        config['unit'] = unit
+    if label is not None:
+        config['label'] = label
+    if source is not None:
+        config['source'] = source
+    if data_type is not None:
+        config['data_type'] = data_type
+    if axes is not None and all(isinstance(x, str) for x in axes):
+        config['axes'] = axes
+    if shape is not None:
+        config['shape'] = shape
+    if data is not None:
+        if isinstance(data, list):
+            config['data'] = data
+        elif isinstance(data, dict) and all(isinstance(data.get(x, None), (int, float)) for x in ('first', 'last', 'size')):
+            config['data'] = data
+    if not (('data_type' in config and 'shape' in config) or 'data' in config):
+        raise ValueError(f'da00 requires at least (`data_type`, `shape`) [or `data`] to make a Variable HDF5 dataset')
+    return config

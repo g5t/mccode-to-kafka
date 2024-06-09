@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mccode-to-kafka"
 dependencies = [
-    "ess-streaming-data-types==0.23.1",
+    "ess-streaming-data-types==0.26.1",
     "confluent-kafka==2.3.0",
     "numpy",
     "importlib_metadata; python_version<'3.8'",
@@ -16,7 +16,7 @@ dynamic = ["version"]
 mccode-to-kafka = "mccode_to_kafka.sender:command_line_send"
 
 [project.optional-dependencies]
-test = ["pytest", "mock", "flake8-pyproject"]
+test = ["pytest", "mock", "flake8-pyproject", "file-writer-control", "python-on-whales", "h5py"]
 
 [tool.setuptools_scm]
 

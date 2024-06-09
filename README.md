@@ -21,9 +21,10 @@ for data serialization.
 The exact schema used by ESS are part of the [streaming-data-types](https://github.com/ess-dmsc/streaming-data-types)
 library, exposed to python via [ess-streaming-data-types](https://github.com/ess-dmsc/python-streaming-data-types).
 
-One of the types defined in the streaming-data-types library is the `Histogram` type, `hs01`,
-which is used by [just-bin-it](https://github.com/ess-dmsc/just-bin-it/) to send histograms to Kafka.
-These histograms can then be retrieved by a [kafka-to-nexus](https://github.com/ess-dmsc/kafka-to-nexus) file writer
+One of the types defined in the streaming-data-types library, `da00`, can be used to represent
+related datasets, including histograms and their axes.
+This module can encode McStas histograms as `da00` messages and send them to a Kafka stream.
+The histograms can then be retrieved by a [kafka-to-nexus](https://github.com/ess-dmsc/kafka-to-nexus) file writer
 for inclusion in a NeXus data file.
 
 ## Motivation
