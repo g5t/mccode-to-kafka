@@ -16,7 +16,7 @@ class HistogramSink:
         self.source = source_name
         self.normalise = normalise
 
-    def serialise_function(self, histogram: DatFileCommon, timestamp: datetime | int, information: str):
+    def serialise_function(self, histogram: DatFileCommon, timestamp: datetime | None, information: str | None):
         """
         Serialise a histogram as a hs01 FlatBuffers message.
 
@@ -28,10 +28,10 @@ class HistogramSink:
         from streaming_data_types.dataarray_da00 import serialise_da00
         da_dict = histogram.to_da00_dict(source=self.source, timestamp=timestamp, info=information,
                                          normalise=self.normalise)
-        print(da_dict)
         return serialise_da00(**da_dict)
 
-    def send_histogram(self, topic, histogram: DatFileCommon, timestamp: int = 0, information: str = ""):
+    def send_histogram(self, topic, histogram: DatFileCommon,
+                       timestamp: datetime | None = None, information: str | None = None):
         """
         Send a histogram.
 
