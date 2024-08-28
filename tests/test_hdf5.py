@@ -216,7 +216,7 @@ def send_one_d_monitor(file_contents: str, topic: str):
                         information=f'topic {topic} from mccode-to-kafka')  # timestamped as now_in_ns_since_epoch
 
 
-@unittest.skipif(IN_GITHUB_ACTIONS)
+@unittest.skipIf(IN_GITHUB_ACTIONS, "Orchestrated test probably won't run on GitHub Actions")
 class HDF5OutputTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
