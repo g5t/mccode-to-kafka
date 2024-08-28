@@ -10,10 +10,21 @@ dependencies = [
     "numpy",
     "importlib_metadata; python_version<'3.8'",
 ]
+description = "Send McCode generated histograms to a Kafka server as da00 messages"
+readme = "README.md"
+authors = [
+   { name = "Gregory Tucker", email = "gregory.tucker@ess.eu" },
+]
+classifiers = [
+    "License :: OSI Approved :: BSD License",
+]
 dynamic = ["version"]
 
 [project.scripts]
 mccode-to-kafka = "mccode_to_kafka.sender:command_line_send"
+
+[project.urls]
+"Homepage" = "https://github.com/g5t/mccode-to-kafka"
 
 [project.optional-dependencies]
 test = ["pytest", "mock", "flake8-pyproject", "file-writer-control", "python-on-whales", "h5py"]
