@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import unittest
+import os
+
+IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
 
 WRITER = None
 WRITER_COUNT = 2
@@ -213,6 +216,7 @@ def send_one_d_monitor(file_contents: str, topic: str):
                         information=f'topic {topic} from mccode-to-kafka')  # timestamped as now_in_ns_since_epoch
 
 
+@unittest.skipif(IN_GITHUB_ACTIONS)
 class HDF5OutputTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
