@@ -5,8 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mccode-to-kafka"
 dependencies = [
-    "ess-streaming-data-types==0.26.1",
-    "confluent-kafka==2.3.0",
+    "ess-streaming-data-types>=0.26.1",
+    "confluent-kafka>=2.3.0",
     "numpy",
     "importlib_metadata; python_version<'3.8'",
 ]

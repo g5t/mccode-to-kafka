@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from numpy import ndarray
@@ -19,10 +21,10 @@ def dim_metadata(length, label_unit, lower_limit, upper_limit) -> dict:
 @dataclass
 class DatFileCommon:
     source: Path
-    metadata: dict = field(default_factory=dict)
-    parameters: dict = field(default_factory=dict)
-    variables: list[str] = field(default_factory=list)
-    data: ndarray = field(default_factory=ndarray)
+    metadata: dict
+    parameters: dict
+    variables: list[str]
+    data: ndarray
     id: int | None = None
 
     def __post_init__(self):

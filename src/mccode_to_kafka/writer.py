@@ -1,4 +1,5 @@
 """The kafka-to-nexus file writer must be configured to include streamed histogram data in the output file."""
+from __future__ import annotations
 
 
 def da00_dataarray_config(topic: str,
