@@ -23,6 +23,9 @@ def send_histograms(root: Path, names: list[str] = None, source: str = None, bro
     security_config = dict()
     sink = create_histogram_sink(config, security_config)
 
+    # If the user specified names, ensure they're present before trying to read them
+    names = [name for name in names if root.joinpath(f'{name}.dat').exists()]
+
     for name in names:
         dat = read_mccode_dat(str(root.joinpath(f'{name}.dat')))
         sink.send_histogram(name, dat, information=f'{name} from {root}')
