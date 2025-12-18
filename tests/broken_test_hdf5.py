@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from pathlib import Path
 import unittest
 import os
 
@@ -17,7 +17,7 @@ TOPICS = ['TEST_epicsConnectionStatus', 'TEST_sampleEnv', 'TEST_writer_jobs', 'T
           ]
 
 # Importantly, this string must not start or end with a blank line!
-ONE_D_MONITOR = """# Format: McCode with text headers
+ONE_D_MONITOR = r"""# Format: McCode with text headers
 # URL: http://www.mccode.org
 # Creator: McStas
 # Instrument: 
