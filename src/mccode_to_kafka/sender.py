@@ -34,7 +34,7 @@ def send_histograms(
     if broker is None:
         broker = 'localhost:9092'
 
-    if config is not None:
+    if config is None:
         config = {'data_brokers': [broker]}
 
     if topic is None and source is None:
