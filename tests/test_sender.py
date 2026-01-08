@@ -120,7 +120,7 @@ class TestSendHistogramsSingleSource:
     @patch('mccode_to_kafka.sender.read_mccode_dat')
     def test_sends_multiple_histograms_same_sink(self, mock_read, mock_create_sink, temp_dir, mock_sink, mock_histogram):
         """Test that multiple histograms are sent using the same sink."""
-        from mccode_to_kafka.sender import send_histograms_single_source
+        from mccode_to_kafka.sender import send_histograms_single_source, HistogramInfo
 
         mock_create_sink.return_value = mock_sink
         mock_read.return_value = mock_histogram
@@ -129,7 +129,9 @@ class TestSendHistogramsSingleSource:
         config = {'source': 'test-source', 'data_brokers': ['localhost:9092']}
         security = {}
 
-        send_histograms_single_source(temp_dir, names, config, security)
+        histograms = [HistogramInfo(temp_dir, name) for name in names]
+
+        send_histograms_single_source(histograms, config, security)
 
         # Verify sink was created once
         mock_create_sink.assert_called_once_with(config, security)
@@ -149,7 +151,7 @@ class TestSendHistogramsSingleSource:
     @patch('mccode_to_kafka.sender.read_mccode_dat')
     def test_includes_information_field(self, mock_read, mock_create_sink, temp_dir, mock_sink, mock_histogram):
         """Test that information field is properly set."""
-        from mccode_to_kafka.sender import send_histograms_single_source
+        from mccode_to_kafka.sender import send_histograms_single_source, HistogramInfo
 
         mock_create_sink.return_value = mock_sink
         mock_read.return_value = mock_histogram
@@ -158,7 +160,9 @@ class TestSendHistogramsSingleSource:
         config = {'source': 'test-source', 'data_brokers': ['localhost:9092']}
         security = {}
 
-        send_histograms_single_source(temp_dir, names, config, security)
+        histograms = [HistogramInfo(temp_dir, name) for name in names]
+
+        send_histograms_single_source(histograms, config, security)
 
         # Check that information parameter is passed
         call_args = mock_sink.send_histogram.call_args
@@ -174,7 +178,7 @@ class TestSendHistogramsSingleTopic:
     @patch('mccode_to_kafka.sender.read_mccode_dat')
     def test_creates_sink_per_histogram(self, mock_read, mock_create_sink, temp_dir, mock_histogram):
         """Test that a new sink is created for each histogram."""
-        from mccode_to_kafka.sender import send_histograms_single_topic
+        from mccode_to_kafka.sender import send_histograms_single_topic, HistogramInfo
 
         # Capture config state at each call
         captured_configs = []
@@ -193,7 +197,9 @@ class TestSendHistogramsSingleTopic:
         config = {'data_brokers': ['localhost:9092']}
         security = {}
 
-        send_histograms_single_topic(temp_dir, topic, names, config, security)
+        histograms = [HistogramInfo(temp_dir, name) for name in names]
+
+        send_histograms_single_topic(histograms, topic, config, security)
 
         # Verify sink was created twice (once per histogram)
         assert mock_create_sink.call_count == 2
@@ -284,10 +290,11 @@ class TestSendHistograms:
 
         # Verify function was called with parent directory and file stem as name
         mock_single_source.assert_called_once()
-        called_root = mock_single_source.call_args[0][0]
-        called_names = mock_single_source.call_args[0][1]
+        called_histograms = mock_single_source.call_args[0][0]
+        called_roots = [h.root for h in called_histograms]
+        called_names = [h.name for h in called_histograms]
 
-        assert called_root == temp_dir
+        assert called_roots == [temp_dir]
         assert called_names == ['hist1']
 
     @patch('mccode_to_kafka.sender.send_histograms_single_source')
@@ -299,7 +306,7 @@ class TestSendHistograms:
 
         # Verify function was called with all histogram names
         mock_single_source.assert_called_once()
-        called_names = mock_single_source.call_args[0][1]
+        called_names = [h.name for h in mock_single_source.call_args[0][0]]
 
         assert 'hist1' in called_names
         assert 'hist2' in called_names
@@ -316,7 +323,8 @@ class TestSendHistograms:
 
         # Verify only existing files are passed
         mock_single_source.assert_called_once()
-        called_names = mock_single_source.call_args[0][1]
+        called_histograms = mock_single_source.call_args[0][0]
+        called_names = [h.name for h in called_histograms]
 
         assert 'hist1' in called_names
         assert 'hist2' in called_names
@@ -347,6 +355,34 @@ class TestSendHistograms:
 
         assert called_config == custom_config
         assert called_security == custom_security
+
+    @patch('mccode_to_kafka.sender.send_histograms_single_source')
+    def test_remove_deletes_histogram_files(self, mock_single_source, temp_dir):
+        """Test that remove=True deletes histogram files after sending."""
+        from mccode_to_kafka.sender import send_histograms
+
+        # Verify files exist before
+        assert (temp_dir / 'hist1.dat').exists()
+        assert (temp_dir / 'hist2.dat').exists()
+
+        send_histograms(temp_dir, names=['hist1', 'hist2'], remove=True)
+
+        # Verify files were deleted
+        assert not (temp_dir / 'hist1.dat').exists()
+        assert not (temp_dir / 'hist2.dat').exists()
+        # hist3 should still exist (not in names list)
+        assert (temp_dir / 'hist3.dat').exists()
+
+    @patch('mccode_to_kafka.sender.send_histograms_single_source')
+    def test_remove_false_preserves_files(self, mock_single_source, temp_dir):
+        """Test that remove=False (default) preserves histogram files."""
+        from mccode_to_kafka.sender import send_histograms
+
+        send_histograms(temp_dir, names=['hist1', 'hist2'], remove=False)
+
+        # Verify files still exist
+        assert (temp_dir / 'hist1.dat').exists()
+        assert (temp_dir / 'hist2.dat').exists()
 
 
 class TestCommandLineSend:
