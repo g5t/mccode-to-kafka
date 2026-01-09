@@ -32,6 +32,42 @@ class DatFileCommon:
             from uuid import uuid4
             self.id = hash(uuid4())
 
+    def to_dict(self):
+        return {
+            'source': str(self.source),
+            'metadata': self.metadata,
+            'parameters': self.parameters,
+            'variables': self.variables,
+            'data': self.data.tolist(),
+            'id': self.id,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict):
+        from numpy import array
+        meta = d['metadata']
+        ndim = len(meta['type'].split('(', 1)[1].strip(')').split(','))
+        if ndim < 1 or ndim > 2:
+            raise RuntimeError(f'Unexpected number of dimensions: {ndim}')
+        dat_type = DatFile1D if ndim == 1 else DatFile2D
+        return dat_type(
+            source=Path(d['source']),
+            metadata=d['metadata'],
+            parameters=d['parameters'],
+            variables=d['variables'],
+            data=array(d['data']),
+            id=d['id'],
+        )
+
+    def to_json(self) -> str:
+        import json
+        return json.dumps(self.to_dict())
+
+    @classmethod
+    def from_json(cls, json_str: str):
+        import json
+        return cls.from_dict(json.loads(json_str))
+
     @classmethod
     def from_filename(cls, filename: str):
         source = Path(filename).resolve()
@@ -48,12 +84,24 @@ class DatFileCommon:
         from numpy import array
         header = [x.strip(' #\n') for x in filter(lambda x: x[0] == '#', lines)]
         meta = {k.strip(): v.strip() for k, v in
-                [x.split(':', 1) for x in filter(lambda x: not x.startswith('Param'), header)]}
+                [x.split(':', 1) for x in
+                 filter(lambda x: not x.startswith('Param'), header)]}
         parm = {k.strip(): v.strip() for k, v in
-                [x.split(':', 1)[1].split('=', 1) for x in filter(lambda x: x.startswith('Param'), header)]}
+                [x.split(':', 1)[1].split('=', 1) for x in
+                 filter(lambda x: x.startswith('Param'), header)]}
         var = meta.get('variables', '').split(' ')
-        data = array([[float(x) for x in line.strip().split()] for line in filter(lambda x: x[0] != '#', lines)])
-        return cls(source, meta, parm, var, data)
+        data = array([[float(x) for x in line.strip().split()] for line in
+                      filter(lambda x: x[0] != '#', lines)])
+        # specialize to either 1-D or 2-D dat file type:
+        ndim = len(meta['type'].split('(', 1)[1].strip(')').split(','))
+        if ndim < 1 or ndim > 2:
+            raise RuntimeError(f'Unexpected number of dimensions: {ndim}')
+        dat_type = DatFile1D if ndim == 1 else DatFile2D
+        return dat_type.from_parts(source, meta, parm, var, data)
+
+    @classmethod
+    def from_parts(cls, source: Path, meta: dict, parm: dict, var: list[str], data: ndarray):
+        raise NotImplementedError("Only the dat specializations implement this method")
 
     def __getitem__(self, item):
         if item in self.variables:
@@ -122,10 +170,8 @@ class DatFile1D(DatFileCommon):
     def __post_init__(self):
         nx = int(self.metadata['type'].split('(', 1)[1].strip(')'))
         nv = len(self.variables)
-        if self.data.shape[0] != nx or self.data.shape[1] != nv:
+        if self.data.shape != (nv, nx):
             raise RuntimeError(f'Unexpected data shape {self.data.shape} for metadata specifying {nx=} and {nv=}')
-        # we always want the variables along the first dimension:
-        self.data = self.data.transpose((1, 0))
 
     def meta_dim_metadata(self, functor) -> list[dict]:
         lower_limit, upper_limit = [float(x) for x in self['xlimits'].split()]
@@ -136,6 +182,10 @@ class DatFile1D(DatFileCommon):
         md[0]['name'] = self['xvar']
         return md
 
+    @classmethod
+    def from_parts(cls, source: Path, meta: dict, parm: dict, var: list[str], data: ndarray):
+        # McStas-produced files have (nx, nv) shaped data
+        return cls(source, meta, parm, var, data.transpose((1, 0)))
 
 
 @dataclass
@@ -143,10 +193,8 @@ class DatFile2D(DatFileCommon):
     def __post_init__(self):
         nx, ny = [int(x) for x in self.metadata['type'].split('(', 1)[1].strip(')').split(',')]
         nv = len(self.variables)
-        # FIXME Sort out whether this is right or not
-        if self.data.shape[0] != ny * nv or self.data.shape[1] != nx:
-            raise RuntimeError(f'Expected {ny*nv =} by {nx =} but have {self.data.shape}')
-        self.data = self.data.reshape((nv, ny, nx))
+        if self.data.shape != (nv, ny, nx):
+            raise RuntimeError(f"Wrong shape {self.data.shape} for metadata specifying {nx=}, {ny=} and {nv=}")
 
     def meta_dim_metadata(self, functor) -> list[dict]:
         lower_x, upper_x, lower_y, upper_y = [float(x) for x in self['xylimits'].split()]
@@ -160,11 +208,14 @@ class DatFile2D(DatFileCommon):
         md[1]['name'] = self['xvar']
         return md
 
+    @classmethod
+    def from_parts(cls, source: Path, meta: dict, parm: dict, var: list[str], data: ndarray):
+        nx, ny = [int(x) for x in meta['type'].split('(', 1)[1].strip(')').split(',')]
+        nv = len(var)
+        if data.shape != (ny * nv, nx):
+            raise RuntimeError(f'Expected {ny*nv =} by {nx =} but have {data.shape}')
+        return cls(source, meta, parm, var, data.reshape((nv, ny, nx)))
+
 
 def read_mccode_dat(filename: str):
-    common = DatFileCommon.from_filename(filename)
-    ndim = len(common.metadata['type'].split('(', 1)[1].strip(')').split(','))
-    if ndim < 1 or ndim > 2:
-        raise RuntimeError(f'Unexpected number of dimensions: {ndim}')
-    dat_type = DatFile1D if ndim == 1 else DatFile2D
-    return dat_type(common.source, common.metadata, common.parameters, common.variables, common.data)
+    return DatFileCommon.from_filename(filename)

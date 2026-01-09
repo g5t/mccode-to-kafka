@@ -271,6 +271,168 @@ class DatFileTestCase(unittest.TestCase):
     #                     else:
     #                         self.assertEqual(d, i/n if normalise else i)
 
+    def test_to_dict_1d(self):
+        dat = self._load_dat_string(ONE_D_MONITOR, 'monitor_0.dat')
+        d = dat.to_dict()
+
+        self.assertIn('source', d)
+        self.assertIn('metadata', d)
+        self.assertIn('parameters', d)
+        self.assertIn('variables', d)
+        self.assertIn('data', d)
+        self.assertIn('id', d)
+
+        self.assertIsInstance(d['source'], str)
+        self.assertIsInstance(d['data'], list)
+        self.assertEqual(d['metadata'], dat.metadata)
+        self.assertEqual(d['parameters'], dat.parameters)
+        self.assertEqual(d['variables'], dat.variables)
+        self.assertEqual(d['id'], dat.id)
+
+    def test_to_dict_2d(self):
+        dat = self._load_dat_string(TWO_D_MONITOR, 'psd0.dat')
+        d = dat.to_dict()
+
+        self.assertIn('source', d)
+        self.assertIn('metadata', d)
+        self.assertIn('parameters', d)
+        self.assertIn('variables', d)
+        self.assertIn('data', d)
+        self.assertIn('id', d)
+
+        self.assertIsInstance(d['source'], str)
+        self.assertIsInstance(d['data'], list)
+        self.assertEqual(d['metadata'], dat.metadata)
+        self.assertEqual(d['parameters'], dat.parameters)
+        self.assertEqual(d['variables'], dat.variables)
+        self.assertEqual(d['id'], dat.id)
+
+    def test_from_dict_1d(self):
+        from mccode_to_kafka.datfile import DatFile1D
+        from numpy import array_equal
+        dat = self._load_dat_string(ONE_D_MONITOR, 'monitor_0.dat')
+        d = dat.to_dict()
+
+        restored = DatFile1D.from_dict(d)
+
+        self.assertIsInstance(restored, DatFile1D)
+        self.assertEqual(str(restored.source), d['source'])
+        self.assertEqual(restored.metadata, dat.metadata)
+        self.assertEqual(restored.parameters, dat.parameters)
+        self.assertEqual(restored.variables, dat.variables)
+        self.assertEqual(restored.id, dat.id)
+        self.assertTrue(array_equal(restored.data, dat.data))
+
+    def test_from_dict_2d(self):
+        from mccode_to_kafka.datfile import DatFile2D
+        from numpy import array_equal
+        dat = self._load_dat_string(TWO_D_MONITOR, 'psd0.dat')
+        d = dat.to_dict()
+
+        restored = DatFile2D.from_dict(d)
+
+        self.assertIsInstance(restored, DatFile2D)
+        self.assertEqual(str(restored.source), d['source'])
+        self.assertEqual(restored.metadata, dat.metadata)
+        self.assertEqual(restored.parameters, dat.parameters)
+        self.assertEqual(restored.variables, dat.variables)
+        self.assertEqual(restored.id, dat.id)
+        self.assertTrue(array_equal(restored.data, dat.data))
+
+    def test_to_json_1d(self):
+        import json
+        dat = self._load_dat_string(ONE_D_MONITOR, 'monitor_0.dat')
+
+        json_str = dat.to_json()
+
+        self.assertIsInstance(json_str, str)
+        parsed = json.loads(json_str)
+        self.assertEqual(parsed['metadata'], dat.metadata)
+        self.assertEqual(parsed['parameters'], dat.parameters)
+        self.assertEqual(parsed['variables'], dat.variables)
+        self.assertEqual(parsed['id'], dat.id)
+
+    def test_to_json_2d(self):
+        import json
+        dat = self._load_dat_string(TWO_D_MONITOR, 'psd0.dat')
+
+        json_str = dat.to_json()
+
+        self.assertIsInstance(json_str, str)
+        parsed = json.loads(json_str)
+        self.assertEqual(parsed['metadata'], dat.metadata)
+        self.assertEqual(parsed['parameters'], dat.parameters)
+        self.assertEqual(parsed['variables'], dat.variables)
+        self.assertEqual(parsed['id'], dat.id)
+
+    def test_from_json_1d(self):
+        from mccode_to_kafka.datfile import DatFile1D
+        from numpy import array_equal
+        dat = self._load_dat_string(ONE_D_MONITOR, 'monitor_0.dat')
+        json_str = dat.to_json()
+
+        restored = DatFile1D.from_json(json_str)
+
+        self.assertIsInstance(restored, DatFile1D)
+        self.assertEqual(restored.metadata, dat.metadata)
+        self.assertEqual(restored.parameters, dat.parameters)
+        self.assertEqual(restored.variables, dat.variables)
+        self.assertEqual(restored.id, dat.id)
+        self.assertTrue(array_equal(restored.data, dat.data))
+
+    def test_from_json_2d(self):
+        from mccode_to_kafka.datfile import DatFile2D
+        from numpy import array_equal
+        dat = self._load_dat_string(TWO_D_MONITOR, 'psd0.dat')
+        json_str = dat.to_json()
+
+        restored = DatFile2D.from_json(json_str)
+
+        self.assertIsInstance(restored, DatFile2D)
+        self.assertEqual(restored.metadata, dat.metadata)
+        self.assertEqual(restored.parameters, dat.parameters)
+        self.assertEqual(restored.variables, dat.variables)
+        self.assertEqual(restored.id, dat.id)
+        self.assertTrue(array_equal(restored.data, dat.data))
+
+    def test_roundtrip_preserves_data_shape_1d(self):
+        from mccode_to_kafka.datfile import DatFile1D
+        dat = self._load_dat_string(ONE_D_MONITOR, 'monitor_0.dat')
+        original_shape = dat.data.shape
+
+        restored = DatFile1D.from_json(dat.to_json())
+
+        self.assertEqual(restored.data.shape, original_shape)
+        self.assertEqual(restored.data.shape, (4, 10))
+
+    def test_roundtrip_preserves_data_shape_2d(self):
+        from mccode_to_kafka.datfile import DatFile2D
+        dat = self._load_dat_string(TWO_D_MONITOR, 'psd0.dat')
+        original_shape = dat.data.shape
+
+        restored = DatFile2D.from_json(dat.to_json())
+
+        self.assertEqual(restored.data.shape, original_shape)
+        self.assertEqual(restored.data.shape, (3, 20, 20))
+
+    def test_roundtrip_preserves_id_1d(self):
+        from mccode_to_kafka.datfile import DatFile1D
+        dat = self._load_dat_string(ONE_D_MONITOR, 'monitor_0.dat')
+        original_id = dat.id
+
+        restored = DatFile1D.from_json(dat.to_json())
+
+        self.assertEqual(restored.id, original_id)
+
+    def test_roundtrip_preserves_id_2d(self):
+        from mccode_to_kafka.datfile import DatFile2D
+        dat = self._load_dat_string(TWO_D_MONITOR, 'psd0.dat')
+        original_id = dat.id
+
+        restored = DatFile2D.from_json(dat.to_json())
+
+        self.assertEqual(restored.id, original_id)
+
 
 if __name__ == '__main__':
     unittest.main()
