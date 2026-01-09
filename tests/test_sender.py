@@ -458,3 +458,167 @@ class TestIntegrationWithRealFiles:
         from mccode_to_kafka.datfile import DatFileCommon
         assert isinstance(sent_histogram, DatFileCommon)
 
+
+class TestSendJsonSerializedHistogram:
+    """Tests for send_json_serialized_histogram function."""
+
+    @patch('mccode_to_kafka.sender.create_histogram_sink')
+    def test_sends_histogram_from_json(self, mock_create_sink):
+        """Test that a histogram is correctly deserialized and sent from JSON."""
+        from mccode_to_kafka.sender import send_json_serialized_histogram
+        from mccode_to_kafka.datfile import DatFile1D
+        import json
+
+        mock_sink = Mock()
+        mock_create_sink.return_value = mock_sink
+
+        # Create a valid JSON representation of a DatFile1D
+        json_data = json.dumps({
+            "source": "/tmp/test.dat",
+            "metadata": {"type": "array_1d(3)", "xlabel": "x", "variables": "x I I_err N"},
+            "parameters": {},
+            "variables": ["x", "I", "I_err", "N"],
+            "data": [[0, 1, 2], [10.0, 20.0, 30.0], [1.0, 2.0, 3.0], [5, 10, 15]],
+            "id": 12345
+        })
+
+        send_json_serialized_histogram(json_data, topic='test-topic')
+
+        mock_create_sink.assert_called_once()
+        mock_sink.send_histogram.assert_called_once()
+
+        # Verify the histogram was sent to the correct topic
+        call_args = mock_sink.send_histogram.call_args
+        assert call_args[0][0] == 'test-topic'
+
+    @patch('mccode_to_kafka.sender.create_histogram_sink')
+    def test_defaults_topic_to_json_dat(self, mock_create_sink):
+        """Test that topic defaults to 'json_dat' when not specified."""
+        from mccode_to_kafka.sender import send_json_serialized_histogram
+        import json
+
+        mock_sink = Mock()
+        mock_create_sink.return_value = mock_sink
+
+        json_data = json.dumps({
+            "source": "/tmp/test.dat",
+            "metadata": {"type": "array_1d(3)", "xlabel": "x", "variables": "x I I_err N"},
+            "parameters": {},
+            "variables": ["x", "I", "I_err", "N"],
+            "data": [[0, 1, 2], [10.0, 20.0, 30.0], [1.0, 2.0, 3.0], [5, 10, 15]],
+            "id": 12345
+        })
+
+        send_json_serialized_histogram(json_data)
+
+        call_args = mock_sink.send_histogram.call_args
+        assert call_args[0][0] == 'json_dat'
+
+    @patch('mccode_to_kafka.sender.create_histogram_sink')
+    def test_uses_custom_broker(self, mock_create_sink):
+        """Test that custom broker is used in config."""
+        from mccode_to_kafka.sender import send_json_serialized_histogram
+        import json
+
+        mock_sink = Mock()
+        mock_create_sink.return_value = mock_sink
+
+        json_data = json.dumps({
+            "source": "/tmp/test.dat",
+            "metadata": {"type": "array_1d(3)", "xlabel": "x", "variables": "x I I_err N"},
+            "parameters": {},
+            "variables": ["x", "I", "I_err", "N"],
+            "data": [[0, 1, 2], [10.0, 20.0, 30.0], [1.0, 2.0, 3.0], [5, 10, 15]],
+            "id": 12345
+        })
+
+        send_json_serialized_histogram(json_data, broker='kafka:9093')
+
+        config = mock_create_sink.call_args[0][0]
+        assert config['data_brokers'] == ['kafka:9093']
+
+    @patch('mccode_to_kafka.sender.create_histogram_sink')
+    def test_uses_custom_source(self, mock_create_sink):
+        """Test that custom source is used in config."""
+        from mccode_to_kafka.sender import send_json_serialized_histogram
+        import json
+
+        mock_sink = Mock()
+        mock_create_sink.return_value = mock_sink
+
+        json_data = json.dumps({
+            "source": "/tmp/test.dat",
+            "metadata": {"type": "array_1d(3)", "xlabel": "x", "variables": "x I I_err N"},
+            "parameters": {},
+            "variables": ["x", "I", "I_err", "N"],
+            "data": [[0, 1, 2], [10.0, 20.0, 30.0], [1.0, 2.0, 3.0], [5, 10, 15]],
+            "id": 12345
+        })
+
+        send_json_serialized_histogram(json_data, source='my-source')
+
+        config = mock_create_sink.call_args[0][0]
+        assert config['source'] == 'my-source'
+
+    @patch('mccode_to_kafka.sender.create_histogram_sink')
+    def test_information_field_set(self, mock_create_sink):
+        """Test that information field is set correctly."""
+        from mccode_to_kafka.sender import send_json_serialized_histogram
+        import json
+
+        mock_sink = Mock()
+        mock_create_sink.return_value = mock_sink
+
+        json_data = json.dumps({
+            "source": "/tmp/test.dat",
+            "metadata": {"type": "array_1d(3)", "xlabel": "x", "variables": "x I I_err N"},
+            "parameters": {},
+            "variables": ["x", "I", "I_err", "N"],
+            "data": [[0, 1, 2], [10.0, 20.0, 30.0], [1.0, 2.0, 3.0], [5, 10, 15]],
+            "id": 12345
+        })
+
+        send_json_serialized_histogram(json_data)
+
+        call_kwargs = mock_sink.send_histogram.call_args.kwargs
+        assert 'information' in call_kwargs
+        assert 'mccode-to-kafka json' in call_kwargs['information']
+
+
+class TestCommandLineSendJsonMode:
+    """Tests for command_line_send JSON subcommand."""
+
+    @patch('mccode_to_kafka.sender.send_json_serialized_histogram')
+    @patch('sys.argv', ['mccode-send', 'json', '{"source": "test"}', '--topic', 'my-topic'])
+    def test_json_mode_calls_send_json_serialized(self, mock_send_json):
+        """Test that JSON mode calls send_json_serialized_histogram."""
+        from mccode_to_kafka.sender import command_line_send
+
+        command_line_send()
+
+        mock_send_json.assert_called_once()
+        call_kwargs = mock_send_json.call_args.kwargs
+        assert call_kwargs['json_data'] == '{"source": "test"}'
+        assert call_kwargs['topic'] == 'my-topic'
+
+    @patch('mccode_to_kafka.sender.send_json_serialized_histogram')
+    @patch('sys.argv', ['mccode-send', 'json', '{"source": "test"}', '--source', 'my-source'])
+    def test_json_mode_with_source(self, mock_send_json):
+        """Test that JSON mode handles source argument."""
+        from mccode_to_kafka.sender import command_line_send
+
+        command_line_send()
+
+        call_kwargs = mock_send_json.call_args.kwargs
+        assert call_kwargs['source'] == 'my-source'
+
+    @patch('mccode_to_kafka.sender.send_json_serialized_histogram')
+    @patch('sys.argv', ['mccode-send', 'json', '{"source": "test"}', '--broker', 'kafka:9093'])
+    def test_json_mode_with_broker(self, mock_send_json):
+        """Test that JSON mode handles broker argument."""
+        from mccode_to_kafka.sender import command_line_send
+
+        command_line_send()
+
+        call_kwargs = mock_send_json.call_args.kwargs
+        assert call_kwargs['broker'] == 'kafka:9093'

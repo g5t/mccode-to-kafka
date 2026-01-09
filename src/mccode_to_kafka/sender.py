@@ -54,6 +54,19 @@ def send_histograms_single_topic(histograms: list[HistogramInfo], topic: str, co
         sink.send_histogram(topic, histogram.data, information=histogram.message)
 
 
+def config_security(
+        broker: str | None, topic: str | None, source: str | None,
+        config: dict[str,str|list[str]] | None, security: dict | None
+) -> tuple[dict[str,str|list[str]], dict]:
+    if config is None:
+        config = {'data_brokers': [broker or 'localhost:9092']}
+    if topic is None and source is None:
+        source = 'mccode-to-kafka'
+    if source:
+        config['source'] = source
+    return config, security or {}
+
+
 def send_histograms(
         root: Path, names: list[str] | None = None,
         topic: str | None = None, source: str | None = None, broker: str | None = None,
@@ -76,19 +89,7 @@ def send_histograms(
     Raises:
         RuntimeError: If root path does not exist.
     """
-    if broker is None:
-        broker = 'localhost:9092'
-
-    if config is None:
-        config = {'data_brokers': [broker]}
-
-    if topic is None and source is None:
-        source = 'mccode-to-kafka'
-    if source is not None:
-        config['source'] = source
-
-    if security is None:
-        security = {}
+    config, security = config_security(broker, topic, source, config, security)
 
     if not root.exists():
         raise RuntimeError(f'{root} does not exist')
@@ -113,16 +114,61 @@ def send_histograms(
             histogram.delete()
 
 
+def send_json_serialized_histogram(
+        json_data: str,
+        topic: str | None = None, source : str | None = None, broker: str | None = None,
+        config: dict | None = None, security: dict | None = None,
+):
+    from .datfile import DatFileCommon
+    if topic is None:
+        topic = 'json_dat'
+    config, security = config_security(broker, topic, source, config, security)
+    sink = create_histogram_sink(config, security)
+    sink.send_histogram(topic, DatFileCommon.from_json(json_data), information="via 'mccode-to-kafka json'")
+
 
 def command_line_send():
     import argparse
+    import sys
+
     parser = argparse.ArgumentParser(description='Send histograms to Kafka')
-    parser.add_argument('root', type=str, help='The root directory or file to send')
-    parser.add_argument('-n', '--name', type=str, nargs='+', help='The names of the histograms to send', default=None)
-    parser.add_argument('--broker', type=str, help='The broker to send to', default=None)
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('--topic', type=str, help='The topic name to use', default=None)
-    group.add_argument('--source', type=str, help='The source name to use', default=None)
+    subparsers = parser.add_subparsers(dest='mode')
+
+    # Subcommand for file-based sending
+    file_parser = subparsers.add_parser('file', help='Send from file(s)')
+    file_parser.add_argument('root', type=str, help='The root directory or file')
+    file_parser.add_argument('-n', '--name', type=str, nargs='+', default=None)
+    group = file_parser.add_mutually_exclusive_group()
+    group.add_argument('--topic', type=str, default=None)
+    group.add_argument('--source', type=str, default=None)
+
+    # Subcommand for JSON-based sending
+    json_parser = subparsers.add_parser('json', help='Send from JSON string')
+    json_parser.add_argument('data', type=str, help='JSON string of DatFile')
+    json_parser.add_argument('--topic', type=str, default=None)
+    json_parser.add_argument('--source', type=str, default=None)
+
+    # Common arguments for both
+    for p in [file_parser, json_parser]:
+        p.add_argument('--broker', type=str, default=None)
+
+    # Default to 'file' mode if no subcommand provided
+    if len(sys.argv) > 1 and sys.argv[1] not in ('file', 'json', '-h', '--help'):
+        sys.argv.insert(1, 'file')
+
     args = parser.parse_args()
-    send_histograms(
-        root=Path(args.root), names=args.name, broker=args.broker, topic=args.topic, source=args.source)
+
+    if args.mode is None:
+        parser.print_help()
+        return
+
+    if args.mode == 'json':
+        send_json_serialized_histogram(
+            json_data=args.data, topic=args.topic, source=args.source,
+            broker=args.broker
+        )
+    else:
+        send_histograms(
+            root=Path(args.root), names=args.name, broker=args.broker,
+            topic=args.topic, source=args.source
+        )
